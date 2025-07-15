@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>マンデーくんBot</title>
+  <style>
+    body { font-family: 'Arial', sans-serif; background: #f6f6f6; padding: 20px; }
+    #chatbox { max-width: 600px; margin: auto; background: #fff; border-radius: 10px; padding: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+    .user, .bot { margin: 10px 0; padding: 10px; border-radius: 10px; }
+    .user { background: #d0e8ff; text-align: right; }
+    .bot { background: #ffe9c8; text-align: left; white-space: pre-wrap; }
+    input[type="text"] { width: 80%; padding: 10px; border-radius: 5px; border: 1px solid #ccc; }
+    button { padding: 10px 20px; margin-left: 10px; border: none; background: #0066cc; color: white; border-radius: 5px; cursor: pointer; }
+    button:hover { background: #004999; }
+  </style>
+</head>
+<body>
+  <div id="chatbox">
+    <div id="messages"></div>
+    <input type="text" id="userInput" placeholder="マンデーくんに話しかけてみよう…" onkeydown="if(event.key === 'Enter'){sendMessage()}" />
+    <button onclick="sendMessage()">送信</button>
+  </div>
+
+  <script>
+    const messagesEl = document.getElementById('messages');
+
+    function sendMessage() {
+      const input = document.getElementById('userInput');
+      const text = input.value.trim();
+      if (!text) return;
+      addMessage('user', text);
+      input.value = '';
+      setTimeout(() => respond(text), 500);
+    }
+
+    function addMessage(sender, text) {
+      const msg = document.createElement('div');
+      msg.className = sender;
+      msg.textContent = text;
+      messagesEl.appendChild(msg);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+    }
+
+    function respond(input) {
+      const lowered = input.toLowerCase();
+      let response = '';
+
+      if (lowered.includes('おはよう')) {
+        const excuses = [
+          'おはようございます…すみません、朝から急に右耳の奥がムズムズしてて…今日は様子を見させていただきたいです…',
+          'おはようございます…さっき階段の3段目から落ちたかもしれなくて…尻もちついて…座れない感じで…',
+          'おはようございます…実は昨日の夜からエアコンの風が喉に当たってたみたいで…声が…枯れて…仕事にならないかと…',
+          'おはようございます…朝起きたら急に部屋の匂いが変で…これはもしかしたら…化学物質過敏症かもと思って…',
+          'おはようございます…実は今日、父が夢に出てきて「今日は休め」と…神託みたいなもので…'
+        ];
+        response = excuses[Math.floor(Math.random() * excuses.length)] + '\nでも…とにかく今日は休ませてください。何を言われても、はい…休みます。';
+
+      } else if (lowered.includes('だめ') || lowered.includes('出てこい')) {
+        response = 'それは無理です…もう布団から出た瞬間に立ちくらみして…今、夢か現か分かりません…でも今日は確実に休みます。これは強い意志です。';
+
+      } else {
+        response = 'すみません…わかりました…（わかっていないし、出社もしません）';
+      }
+
+      addMessage('bot', response);
+    }
+  </script>
+</body>
+</html>

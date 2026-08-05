@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Kunihiro Nomura. All rights reserved.
+// 昆虫戦争 (Konchu Senso) — 無断複製・改変・再配布を禁じます。詳細は /LICENSE を参照。
+
 // 画面のながれと 入力の せいぎょ。
 // ルールは engine.js、絵は render.js に 分けてあるので、ここは「つなぎ」に てっしている。
 

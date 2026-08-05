@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Kunihiro Nomura. All rights reserved.
+// 昆虫戦争 (Konchu Senso) — 無断複製・改変・再配布を禁じます。詳細は /LICENSE を参照。
+
 // 昆虫ユニットのデータ。
 //
 // 設計方針: ゲーム上の強さの数値には、かならず「本物の昆虫の特徴」という理由をつける。

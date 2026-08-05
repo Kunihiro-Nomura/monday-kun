@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Kunihiro Nomura. All rights reserved.
+// 昆虫戦争 (Konchu Senso) — 無断複製・改変・再配布を禁じます。詳細は /LICENSE を参照。
+
 // 地形データ。ゲーム上の役割を、昆虫が実際にすんでいる場所に読み替えている。
 // move: 移動タイプごとの移動コスト。null は通行できない。
 // def:  防御星（0〜4）。高いほどダメージを受けにくい。

@@ -1,0 +1,75 @@
+著作権表示 / Copyright Notice
+
+Copyright (c) 2026 Kunihiro Nomura. All rights reserved.
+無断複製・転載・改変・再配布を禁じます。
+
+--------------------------------------------------------------------------
+日本語
+--------------------------------------------------------------------------
+
+本リポジトリに含まれるすべての内容（ソースコード、ゲームデザイン、企画書、
+テキスト、画像、音声、データファイル、およびそれらの選択・配列を含む）の
+著作権は、野村 邦弘（以下「著作権者」）に帰属します。
+
+本リポジトリは閲覧を目的として公開されていますが、
+**オープンソースソフトウェアではありません。**
+
+著作権者の書面による事前の許諾なく、以下の行為を禁止します。
+
+  1. 本著作物の全部または一部の複製、頒布、公衆送信、譲渡、貸与
+  2. 本著作物の全部または一部の改変、翻案、二次的著作物の作成
+  3. 本著作物の全部または一部の商用利用
+  4. 本著作物を、機械学習モデルの学習データとして利用すること
+  5. 本著作物のゲームデザイン、ステージ構成、ユニット設定、
+     図鑑テキストその他の創作的表現を流用した類似作品の制作・公開
+
+次の行為は許諾なく行えます。
+
+  - 本リポジトリの閲覧
+  - 私的使用のための複製（著作権法第30条の範囲内）
+  - 引用（著作権法第32条の要件を満たす範囲内）
+
+なお、ゲームのルールやシステムといったアイデアそのものは著作権の保護対象では
+ありませんが、本著作物における具体的な表現（コード、文章、画像、データの
+具体的な内容とその配列）は保護されます。
+
+ライセンスに関するお問い合わせは、リポジトリの Issue または
+著作権者への直接のご連絡にてお願いします。
+
+--------------------------------------------------------------------------
+English
+--------------------------------------------------------------------------
+
+All contents of this repository (including source code, game design,
+planning documents, text, images, audio, data files, and the selection and
+arrangement thereof) are copyrighted by Kunihiro Nomura ("the Copyright
+Holder").
+
+This repository is published for viewing purposes only.
+**It is NOT open source software.**
+
+Without prior written permission from the Copyright Holder, the following
+are prohibited:
+
+  1. Reproduction, distribution, public transmission, transfer, or lending
+     of this work in whole or in part
+  2. Modification, adaptation, or creation of derivative works
+  3. Commercial use in whole or in part
+  4. Use of this work as training data for machine learning models
+  5. Creation or publication of similar works that appropriate the game
+     design, stage composition, unit definitions, encyclopedia text, or
+     other creative expression of this work
+
+The following are permitted without permission:
+
+  - Viewing this repository
+  - Reproduction for private use (within Article 30 of the Japanese
+    Copyright Act)
+  - Quotation (within the requirements of Article 32 of the same Act)
+
+Note that game rules and systems as ideas are not themselves protected by
+copyright; however, the specific expression in this work (the concrete
+content and arrangement of code, text, images, and data) is protected.
+
+For licensing inquiries, please open an Issue in this repository or contact
+the Copyright Holder directly.

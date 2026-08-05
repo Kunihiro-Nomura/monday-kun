@@ -71,6 +71,7 @@ html, body {
 .title-lead { color: #dbe6d3; font-size: 15px; line-height: 1.8; margin-bottom: 28px; }
 .menu-buttons { display: flex; flex-direction: column; gap: 12px; align-items: center; }
 .version { margin-top: 28px; color: #7d8a76; font-size: 12px; }
+.copyright { margin-top: 6px; color: #5f6b5a; font-size: 11px; }
 
 /* ---- 上部バー ---- */
 .bar {

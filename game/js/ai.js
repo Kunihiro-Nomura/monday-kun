@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Kunihiro Nomura. All rights reserved.
+// 昆虫戦争 (Konchu Senso) — 無断複製・改変・再配布を禁じます。詳細は /LICENSE を参照。
+
 // 敵AI。
 // Lv1（世界1〜2）: 目の前の敵を なぐる。アリは 近くの 樹液場を とりにいく。
 // Lv2 以降は これを 土台に「相性のよい相手をねらう」「間接こうげきの間合い管理」を足していく。

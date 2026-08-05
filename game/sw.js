@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Kunihiro Nomura. All rights reserved.
+// 昆虫戦争 (Konchu Senso) — 無断複製・改変・再配布を禁じます。詳細は /LICENSE を参照。
+
 // ホーム画面に ついかしたあと、電波がなくても あそべるようにする。
 // バージョンを 上げると 古いキャッシュを すてて 入れかえる。
 

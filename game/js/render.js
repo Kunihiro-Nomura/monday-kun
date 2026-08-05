@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Kunihiro Nomura. All rights reserved.
+// 昆虫戦争 (Konchu Senso) — 無断複製・改変・再配布を禁じます。詳細は /LICENSE を参照。
+
 // Canvas への 描画。ゲームのルールは いっさい 知らない。
 // 絵文字は プロトタイプ用の かりの絵で、あとで ドット絵に 差しかえる。
 

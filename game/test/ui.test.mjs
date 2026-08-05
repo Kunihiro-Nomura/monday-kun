@@ -1,0 +1,214 @@
+// ブラウザでの 動作かくにん（iPhone サイズ）。
+//   npx http-server game -p 8123 -c-1 &
+//   node game/test/ui.test.mjs [スクリーンショットの保存先]
+// 画面のながれ（えらぶ→動かす→こうげき→生産→ターン交代）が 実機サイズで 通るかを ためす。
+
+import { chromium, devices } from 'playwright';
+import { mkdirSync } from 'node:fs';
+
+const BASE = process.env.GAME_URL || 'http://localhost:8123';
+const OUT = process.argv[2] || null;
+if (OUT) mkdirSync(OUT, { recursive: true });
+
+let failed = 0;
+function check(name, ok, detail = '') {
+  console.log(`  ${ok ? 'ok ' : 'NG '} ${name}${detail ? `  (${detail})` : ''}`);
+  if (!ok) failed++;
+}
+const shot = async (page, name) => {
+  if (OUT) await page.screenshot({ path: `${OUT}/${name}.png` });
+};
+
+const browser = await chromium.launch();
+const ctx = await browser.newContext({ ...devices['iPhone 13'], isMobile: true, hasTouch: true });
+const page = await ctx.newPage();
+
+const errors = [];
+page.on('console', (m) => m.type() === 'error' && errors.push(`CONSOLE: ${m.text()}`));
+page.on('pageerror', (e) => errors.push(`PAGEERROR: ${e.message}`));
+
+const state = () => page.evaluate(() => {
+  const g = window.__e2e.game;
+  return {
+    mode: window.__e2e.ui.mode,
+    turnTeam: g?.turnTeam,
+    turnCount: g?.turnCount,
+    funds: g ? { ...g.funds } : null,
+    status: g?.status,
+    units: g ? g.units.map((u) => ({ type: u.type, team: u.team, x: u.x, y: u.y, acted: u.acted })) : [],
+  };
+});
+
+async function tapTile(tx, ty) {
+  const box = await page.locator('#board').boundingBox();
+  const r = await page.evaluate(() => ({ tile: window.__e2e.renderer.tile, ...window.__e2e.renderer.offset }));
+  await page.mouse.click(box.x + r.x + (tx + 0.5) * r.tile, box.y + r.y + (ty + 0.5) * r.tile);
+  await page.waitForTimeout(220);
+}
+
+console.log('\n== 画面のながれ ==');
+
+await page.goto(`${BASE}/index.html?e2e=1`, { waitUntil: 'networkidle' });
+await page.waitForTimeout(300);
+check('タイトル画面が 出る', await page.locator('#screen-title.active').isVisible());
+await shot(page, '01-title');
+
+await page.click('text=ゲームを はじめる');
+await page.waitForTimeout(250);
+check('ステージ選択が 出る', await page.locator('#screen-stages.active').isVisible());
+const unlocked = await page.locator('.stage-card:not(.locked)').count();
+check('ステージ1だけ あそべる（あとは ロック）', unlocked === 1, `あそべる ${unlocked} 面`);
+await shot(page, '02-stages');
+
+await page.locator('.stage-card:not(.locked)').first().click();
+await page.waitForTimeout(500);
+check('ゲーム画面に 入る', await page.locator('#screen-game.active').isVisible());
+await shot(page, '03-game');
+
+let s = await state();
+check('盤面に ユニットが 配置される', s.units.length === 6, `${s.units.length}体`);
+check('プレイヤーのターンで はじまる', s.turnTeam === 'player');
+
+console.log('\n== 動かす ==');
+
+const ant = s.units.find((u) => u.team === 'player' && u.type === 'ant');
+await tapTile(ant.x, ant.y);
+s = await state();
+check('虫を タップすると 移動モードに なる', s.mode === 'moving', s.mode);
+await shot(page, '04-selected');
+
+await tapTile(ant.x, ant.y - 3);
+s = await state();
+const movedAnt = s.units.find((u) => u.team === 'player' && u.type === 'ant');
+check('えらんだマスに 動く', movedAnt.y === ant.y - 3, `y=${movedAnt.y}`);
+check('移動後に 行動メニューが 出る', s.mode === 'action', s.mode);
+const buttons = await page.locator('#actions .btn').allTextContents();
+check('メニューに「まつ」「もどる」が ある', buttons.includes('まつ') && buttons.includes('もどる'), buttons.join('/'));
+await shot(page, '05-moved');
+
+console.log('\n== とりけし ==');
+
+await page.click('#actions .btn:has-text("もどる")');
+await page.waitForTimeout(250);
+s = await state();
+const backAnt = s.units.find((u) => u.team === 'player' && u.type === 'ant');
+check('「もどる」で もとの位置に かえる', backAnt.x === ant.x && backAnt.y === ant.y, `(${backAnt.x},${backAnt.y})`);
+check('「もどる」で まだ 行動していない', backAnt.acted === false);
+
+console.log('\n== せんりょう ==');
+
+// アリを 樹液場に 立たせて 占領できるか
+const sap = await page.evaluate(() => {
+  const g = window.__e2e.game;
+  const p = [...g.props.values()].find((p) => g.terrainIdAt(p.x, p.y) === 'sap');
+  const a = g.unitsOf('player').find((u) => u.type === 'ant');
+  a.x = p.x; a.y = p.y; // テストのため 直接 立たせる
+  window.__e2e.renderer.draw();
+  return { x: p.x, y: p.y };
+});
+await tapTile(sap.x, sap.y);
+await tapTile(sap.x, sap.y);
+const capButtons = await page.locator('#actions .btn').allTextContents();
+check('樹液場の 上で「せんりょう」が 出る', capButtons.includes('せんりょう'), capButtons.join('/'));
+if (capButtons.includes('せんりょう')) {
+  await page.click('#actions .btn:has-text("せんりょう")');
+  await page.waitForTimeout(250);
+  const progressed = await page.evaluate(() => {
+    const g = window.__e2e.game;
+    const p = [...g.props.values()].find((p) => g.terrainIdAt(p.x, p.y) === 'sap');
+    return p.capture;
+  });
+  check('せんりょうが すすむ', progressed < 20, `のこり ${progressed}`);
+}
+
+console.log('\n== 生産 ==');
+
+const nest = await page.evaluate(() => {
+  const g = window.__e2e.game;
+  const p = g.propsOf('player').find((p) => g.terrainIdAt(p.x, p.y) === 'nest');
+  return p ? { x: p.x, y: p.y } : null;
+});
+check('プレイヤーの 巣が ある', !!nest);
+if (nest) {
+  await tapTile(nest.x, nest.y);
+  await page.waitForTimeout(250);
+  const items = await page.locator('.produce-item').count();
+  check('生産メニューが ひらく', items > 0, `${items}しゅるい`);
+  await shot(page, '06-produce');
+
+  const fundsBefore = (await state()).funds.player;
+  await page.locator('.produce-item:not([disabled])').first().click();
+  await page.waitForTimeout(300);
+  s = await state();
+  check('虫が うまれる', s.units.length > 6, `${s.units.length}体`);
+  check('お金が へる', s.funds.player < fundsBefore, `${fundsBefore} → ${s.funds.player}`);
+  const born = s.units.find((u) => u.x === nest.x && u.y === nest.y);
+  check('うまれた ターンは 動けない', born?.acted === true);
+}
+
+console.log('\n== ターン交代と 敵AI ==');
+
+await page.click('#btn-endturn');
+await page.waitForTimeout(400);
+s = await state();
+check('敵のターンに なる', s.turnTeam === 'enemy', s.turnTeam);
+await shot(page, '07-ai');
+
+await page.waitForFunction(() => window.__e2e.game.turnTeam === 'player' || window.__e2e.game.status !== 'playing', null, { timeout: 30000 });
+await page.waitForTimeout(300);
+s = await state();
+check('敵AIが 動いて プレイヤーに もどる', s.turnTeam === 'player', s.turnTeam);
+check('ターン数が すすむ', s.turnCount === 2, `ターン ${s.turnCount}`);
+const enemyMoved = s.units.filter((u) => u.team === 'enemy');
+check('敵ユニットが 生きている / 動いている', enemyMoved.length > 0, `${enemyMoved.length}体`);
+await shot(page, '08-after-ai');
+
+console.log('\n== 昆虫ずかん ==');
+
+await page.evaluate(() => window.__e2e.show('zukan'));
+await page.waitForTimeout(300);
+const known = await page.locator('.zukan-card:not(.unknown)').count();
+const total = await page.locator('.zukan-card').count();
+check('ずかんが ひらく', total === 8, `${total}まい`);
+check('たたかいに 出た虫が 図かんに のる', known >= 2, `${known}しゅるい`);
+await shot(page, '09-zukan');
+
+console.log('\n== しょうり画面 ==');
+
+await page.evaluate(() => window.__e2e.show('game'));
+
+// 敵の 女王の巣を あと少しで 落とせる じょうたいを つくり、
+// 実際に「えらぶ → せんりょう」を 押して しょうりに とどくかを ためす。
+const hq = await page.evaluate(() => {
+  const g = window.__e2e.game;
+  const p = [...g.props.values()].find((p) => g.terrainAt(p.x, p.y).hq && p.team === 'enemy');
+  const ant = g.unitsOf('player').find((u) => u.type === 'ant');
+  const blocker = g.unitAt(p.x, p.y);
+  if (blocker) g.units = g.units.filter((u) => u !== blocker);
+  ant.x = p.x;
+  ant.y = p.y;
+  ant.acted = false;
+  ant.hp = 100;
+  p.capture = 1;
+  p.capturedBy = ant.id;
+  g.turnTeam = 'player';
+  window.__e2e.renderer.draw();
+  return { x: p.x, y: p.y };
+});
+
+await tapTile(hq.x, hq.y);
+await tapTile(hq.x, hq.y);
+await page.click('#actions .btn:has-text("せんりょう")');
+await page.waitForTimeout(600);
+const modalVisible = await page.locator('#modal:not(.hidden)').isVisible().catch(() => false);
+const modalText = modalVisible ? await page.locator('#modal-body').innerText() : '';
+check('クリア画面が 出る', modalText.includes('クリア'), modalText.split('\n')[0] || 'モーダルなし');
+check('クリア画面に まめちしきが のる', modalText.includes('まめちしき'));
+await shot(page, '10-victory');
+
+console.log('\n== JSエラー ==');
+check('コンソールエラーが ない', errors.length === 0, errors.join(' | '));
+
+await browser.close();
+console.log(`\n  しっぱい ${failed} 件\n`);
+process.exit(failed ? 1 : 0);

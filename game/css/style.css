@@ -1,0 +1,230 @@
+/* iPhone で 遊ぶことを 前提にした レイアウト。
+   セーフエリア（ノッチ）と、指で 押しやすい ボタンサイズを 意識している。 */
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #14200f;
+  color: #f2f4ee;
+  font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
+  overscroll-behavior: none;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.screen {
+  position: fixed;
+  inset: 0;
+  display: none;
+  flex-direction: column;
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+.screen.active { display: flex; }
+.hidden { display: none !important; }
+
+/* ---- ボタン ---- */
+.btn {
+  appearance: none;
+  border: none;
+  border-radius: 12px;
+  background: #4a7c3f;
+  color: #fff;
+  font-size: 17px;
+  font-weight: 700;
+  padding: 12px 18px;
+  min-height: 46px;
+  cursor: pointer;
+  font-family: inherit;
+  line-height: 1.2;
+}
+.btn:active { background: #3c6634; transform: translateY(1px); }
+.btn.big { font-size: 20px; padding: 16px 32px; }
+.btn.small { font-size: 13px; padding: 8px 10px; min-height: 40px; border-radius: 10px; }
+.btn.ghost { background: #3a4436; }
+.btn.danger { background: #b8442f; }
+.btn:disabled { opacity: 0.4; }
+
+/* ---- タイトル画面 ---- */
+#screen-title {
+  background: radial-gradient(circle at 50% 30%, #33512b 0%, #14200f 70%);
+  align-items: center;
+  justify-content: center;
+}
+.title-wrap { text-align: center; padding: 24px; }
+.game-title {
+  font-size: 15vw;
+  margin: 0;
+  letter-spacing: 0.08em;
+  color: #f5e07a;
+  text-shadow: 0 4px 0 #6b4b12, 0 8px 18px rgba(0,0,0,0.5);
+}
+@media (min-width: 480px) { .game-title { font-size: 72px; } }
+.game-sub { margin: 4px 0 20px; color: #b9c9ae; font-size: 14px; letter-spacing: 0.3em; }
+.title-lead { color: #dbe6d3; font-size: 15px; line-height: 1.8; margin-bottom: 28px; }
+.menu-buttons { display: flex; flex-direction: column; gap: 12px; align-items: center; }
+.version { margin-top: 28px; color: #7d8a76; font-size: 12px; }
+
+/* ---- 上部バー ---- */
+.bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  background: #22301c;
+  border-bottom: 2px solid #0d150a;
+  flex: 0 0 auto;
+}
+.bar-title { font-weight: 700; font-size: 16px; }
+.hud-info { display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 13px; }
+.hud-turn { font-weight: 800; font-size: 16px; }
+.hud-turn.player { color: #7fb8ff; }
+.hud-turn.enemy { color: #ff9080; }
+
+/* ---- ステージ選択 ---- */
+.stage-list { flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+.stage-card {
+  background: #2b3a24;
+  border-radius: 14px;
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  border: 2px solid #3d5133;
+}
+.stage-card.locked { opacity: 0.45; }
+.stage-no {
+  width: 46px; height: 46px; flex: 0 0 auto;
+  border-radius: 50%;
+  background: #4a7c3f;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 800; font-size: 18px;
+}
+.stage-card.cleared .stage-no { background: #d8a53c; color: #2a1e05; }
+.stage-body { flex: 1; min-width: 0; }
+.stage-name { font-weight: 700; font-size: 16px; }
+.stage-hint { font-size: 12px; color: #aebba6; margin-top: 3px; line-height: 1.5; }
+.stage-badge { font-size: 12px; color: #f5d97a; margin-top: 4px; }
+
+/* ---- ゲーム盤 ---- */
+.board-wrap { flex: 1; position: relative; min-height: 0; }
+#board { width: 100%; height: 100%; display: block; touch-action: none; }
+
+.banner {
+  position: absolute;
+  top: 12px; left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0,0,0,0.78);
+  padding: 10px 20px;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 15px;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.tileinfo {
+  flex: 0 0 auto;
+  background: #22301c;
+  border-top: 2px solid #0d150a;
+  padding: 8px 12px;
+  font-size: 13px;
+  line-height: 1.6;
+  min-height: 44px;
+}
+.tileinfo b { color: #f5e07a; }
+.tileinfo .why { color: #a9c79c; font-size: 12px; display: block; margin-top: 2px; }
+
+.actions {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 8px;
+  padding: 8px 10px 10px;
+  background: #1a2415;
+  flex-wrap: wrap;
+}
+.actions .btn { flex: 1 1 auto; min-width: 84px; }
+
+/* ---- 生産リスト ---- */
+.produce-item {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #2b3a24;
+  margin-bottom: 8px;
+  width: 100%;
+  border: none;
+  color: inherit;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.produce-item:disabled { opacity: 0.4; }
+.produce-icon { font-size: 26px; }
+.produce-name { font-weight: 700; font-size: 15px; }
+.produce-meta { font-size: 11px; color: #a9b7a2; margin-top: 2px; line-height: 1.5; }
+.produce-cost { margin-left: auto; font-weight: 800; color: #f5d97a; font-size: 14px; }
+
+/* ---- 昆虫ずかん ---- */
+.zukan-count { font-size: 13px; color: #f5d97a; }
+.zukan-list { flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+.zukan-card {
+  background: #2b3a24;
+  border-radius: 14px;
+  padding: 14px;
+  border: 2px solid #3d5133;
+}
+.zukan-card.unknown { opacity: 0.5; text-align: center; padding: 22px; }
+.zukan-head { display: flex; align-items: center; gap: 12px; }
+.zukan-icon { font-size: 34px; }
+.zukan-name { font-weight: 800; font-size: 18px; }
+.zukan-role { font-size: 12px; color: #a9c79c; }
+.zukan-stats { display: flex; gap: 10px; margin: 10px 0; flex-wrap: wrap; }
+.zukan-stat {
+  background: #1c2717; border-radius: 8px; padding: 5px 10px; font-size: 12px;
+}
+.zukan-stat b { color: #f5d97a; }
+.zukan-facts { font-size: 13px; line-height: 1.85; }
+.zukan-facts dt { color: #8fb883; font-size: 11px; margin-top: 6px; }
+.zukan-facts dd { margin: 0; }
+.zukan-why {
+  margin-top: 10px; padding: 10px; border-radius: 10px;
+  background: #1c2717; font-size: 12.5px; line-height: 1.75; color: #dce9d5;
+}
+.zukan-why b { color: #f5d97a; }
+
+/* ---- モーダル ---- */
+.modal {
+  position: fixed; inset: 0; z-index: 50;
+  background: rgba(0,0,0,0.7);
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+}
+.modal-box {
+  background: #2b3a24;
+  border-radius: 18px;
+  padding: 20px;
+  max-width: 420px;
+  width: 100%;
+  max-height: 84vh;
+  overflow-y: auto;
+  border: 2px solid #4a6340;
+}
+.modal-actions { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
+.modal h2 { margin: 0 0 10px; font-size: 21px; color: #f5e07a; }
+.modal p { font-size: 14px; line-height: 1.8; margin: 6px 0; }
+.fact-card {
+  background: #1c2717; border-radius: 12px; padding: 14px; margin-top: 10px;
+  border-left: 4px solid #f5d97a;
+}
+.fact-card .fact-label { font-size: 11px; color: #8fb883; }
+.fact-card .fact-title { font-weight: 800; font-size: 16px; margin: 4px 0 6px; }
+.fact-card .fact-text { font-size: 13.5px; line-height: 1.85; }

@@ -15,7 +15,9 @@
     "backgrounds": {
       "green": "#00FF00",
       "magenta": "#FF00FF"
-    }
+    },
+    "preferDirectTransparent": "可能なら生成時点で透過PNGを直接出力すること。単色背景からの切り抜きは、光沢面に背景色が映りこむ「色かぶり」が起きるため次善策とする",
+    "spillWarning": "緑背景で切り抜くと、つやのある暗色の被写体（カブトムシ等）の上翅にオリーブ色の色かぶりが出やすい。切り抜き時は色かぶり除去（spill suppression）を行うこと"
   },
   "sizeClasses": {
     "tiny": 0.35,
@@ -38,8 +40,8 @@
       "priority": 1,
       "featureJa": "光沢のある赤褐色。体長の約3分の1の頭角で、先端がコンパクトに二分岐する。胸にも小さな突起。過度に長い枝角状にはしない",
       "featureEn": "Glossy reddish-brown. A head horn about one third of body length, forking compactly at the tip. A small thoracic projection. Do not make it a long antler-like horn.",
-      "status": "ordered",
-      "orderedVia": "B（貼るだけ発注書）"
+      "status": "done",
+      "deliveredAt": "2026-08-06"
     },
     {
       "id": "ant",

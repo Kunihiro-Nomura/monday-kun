@@ -51,6 +51,11 @@ export function hasSprite(id) {
   return sprites.has(id);
 }
 
+// 戦闘シーン（battle.js）からも 同じ絵を つかうための 取り出し口
+export function getSprite(id) {
+  return sprites.get(id) || null;
+}
+
 export const TEAM_COLOR = {
   player: '#2f7fd8',
   enemy: '#d8452f',

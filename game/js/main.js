@@ -6,7 +6,7 @@
 
 import { Game, hpBars, distance } from './engine.js';
 import { AI } from './ai.js';
-import { Renderer, TEAM_COLOR, TEAM_LABEL } from './render.js';
+import { Renderer, TEAM_COLOR, TEAM_LABEL, loadSprites } from './render.js';
 import { MAPS, getMap } from './data/maps.js';
 import { UNITS, baseDamage } from './data/units.js';
 import { TERRAIN } from './data/terrain.js';
@@ -618,5 +618,13 @@ if (new URLSearchParams(location.search).has('e2e')) {
     startStage,
   };
 }
+
+// 用意ずみの スプライトを 読みこむ。まだ ない虫は 絵文字のまま 遊べる。
+loadSprites().then((results) => {
+  if (!results.length) return;
+  const ready = results.filter((r) => r.ok).length;
+  console.info(`スプライト ${ready}/${results.length} 体を 読みこみました`);
+  if (ready && renderer) renderer.draw();
+});
 
 show('title');

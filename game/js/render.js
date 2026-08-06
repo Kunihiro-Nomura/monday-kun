@@ -2,11 +2,54 @@
 // 昆虫戦争 (Konchu Senso) — 無断複製・改変・再配布を禁じます。詳細は /LICENSE を参照。
 
 // Canvas への 描画。ゲームのルールは いっさい 知らない。
-// 絵文字は プロトタイプ用の かりの絵で、あとで ドット絵に 差しかえる。
+//
+// ユニットの絵は assets/units/<id>.png があれば それを使い、
+// なければ 絵文字に フォールバックする（ART_SPEC.md の 26カットを 順に 差しかえていくため）。
 
 import { TERRAIN } from './data/terrain.js';
 import { UNITS } from './data/units.js';
 import { hpBars, key, CAPTURE_POINTS } from './engine.js';
+
+// ---- スプライトの読みこみ ----
+// 絵が できあがった虫だけを manifest.json に 書いておき、それだけを 読みこむ。
+// 絵が まだ ない虫は 絵文字のまま なので、1体ずつ 順に 差しかえていける。
+// （存在しないファイルを 決め打ちで 取りにいくと、毎回 404 が 出て じゃまなので manifest 方式にした）
+const sprites = new Map();
+
+export async function loadSprites(basePath = 'assets/units') {
+  let ids = [];
+  try {
+    const res = await fetch(`${basePath}/manifest.json`);
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data.units)) ids = data.units.filter((id) => UNITS[id]);
+    }
+  } catch {
+    // manifest が なくても 絵文字で 遊べる
+  }
+
+  return Promise.all(
+    ids.map(
+      (id) =>
+        new Promise((resolve) => {
+          const img = new Image();
+          img.onload = () => {
+            sprites.set(id, img);
+            resolve({ id, ok: true });
+          };
+          img.onerror = () => {
+            console.warn(`スプライトを 読みこめませんでした: ${id}.png`);
+            resolve({ id, ok: false });
+          };
+          img.src = `${basePath}/${id}.png`;
+        })
+    )
+  );
+}
+
+export function hasSprite(id) {
+  return sprites.has(id);
+}
 
 export const TEAM_COLOR = {
   player: '#2f7fd8',
@@ -216,11 +259,19 @@ export class Renderer {
       ctx.fill();
     }
 
-    ctx.font = `${Math.round(size * 0.5)}px system-ui, "Apple Color Emoji", sans-serif`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
     ctx.globalAlpha = unit.acted ? 0.55 : 1;
-    ctx.fillText(spec.icon, s.x + size / 2, s.y + size * 0.46);
+
+    const sprite = sprites.get(unit.type);
+    if (sprite) {
+      // 絵は 正方形に 収まっている前提。マスの 8割の 大きさで 中央に おく。
+      const draw = size * 0.8;
+      ctx.drawImage(sprite, s.x + (size - draw) / 2, s.y + (size - draw) / 2, draw, draw);
+    } else {
+      ctx.font = `${Math.round(size * 0.5)}px system-ui, "Apple Color Emoji", sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(spec.icon, s.x + size / 2, s.y + size * 0.46);
+    }
     ctx.globalAlpha = 1;
 
     const bars = hpBars(unit.hp);

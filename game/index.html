@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
+  <meta name="theme-color" content="#1d2a1c" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="昆虫戦争" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <link rel="icon" href="icons/icon-192.png" />
+  <link rel="stylesheet" href="css/style.css" />
+  <title>昆虫戦争</title>
+</head>
+<body>
+
+<!-- タイトル画面 -->
+<section id="screen-title" class="screen active">
+  <div class="title-wrap">
+    <h1 class="game-title">昆虫戦争</h1>
+    <p class="game-sub">こんちゅう せんそう</p>
+    <p class="title-lead">カブトムシ、クワガタ、トンボ、スズメバチ。<br />虫たちの ちからを つかって たたかう さくせんゲーム。</p>
+    <div class="menu-buttons">
+      <button class="btn big" data-goto="stages">ゲームを はじめる</button>
+      <button class="btn" data-goto="zukan">昆虫ずかん</button>
+    </div>
+    <p class="version">プロトタイプ版（世界1のみ）</p>
+    <p class="copyright">&copy; 2026 Kunihiro Nomura. All rights reserved.</p>
+  </div>
+</section>
+
+<!-- ステージ選択 -->
+<section id="screen-stages" class="screen">
+  <header class="bar">
+    <button class="btn small" data-goto="title">← もどる</button>
+    <span class="bar-title">せかい1「草はら」</span>
+    <button class="btn small" data-goto="zukan">ずかん</button>
+  </header>
+  <div id="stage-list" class="stage-list"></div>
+</section>
+
+<!-- ゲーム本編 -->
+<section id="screen-game" class="screen">
+  <header class="bar" id="hud">
+    <button class="btn small" id="btn-quit">やめる</button>
+    <div class="hud-info">
+      <span id="hud-turn" class="hud-turn">あおチーム</span>
+      <span id="hud-count">ターン 1</span>
+      <span id="hud-funds">💰 0</span>
+    </div>
+    <button class="btn small" id="btn-endturn">ターン<br />おわり</button>
+  </header>
+
+  <div class="board-wrap">
+    <canvas id="board"></canvas>
+    <canvas id="battle" class="battle hidden"></canvas>
+    <div id="banner" class="banner hidden"></div>
+  </div>
+
+  <div id="tileinfo" class="tileinfo">虫を タップして えらぼう</div>
+
+  <div id="actions" class="actions hidden"></div>
+</section>
+
+<!-- 昆虫ずかん -->
+<section id="screen-zukan" class="screen">
+  <header class="bar">
+    <button class="btn small" id="zukan-back">← もどる</button>
+    <span class="bar-title">昆虫ずかん</span>
+    <span id="zukan-count" class="zukan-count"></span>
+  </header>
+  <div id="zukan-list" class="zukan-list"></div>
+</section>
+
+<!-- 共通モーダル -->
+<div id="modal" class="modal hidden">
+  <div class="modal-box">
+    <div id="modal-body"></div>
+    <div id="modal-actions" class="modal-actions"></div>
+  </div>
+</div>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

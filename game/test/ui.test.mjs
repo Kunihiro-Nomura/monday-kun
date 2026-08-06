@@ -86,8 +86,62 @@ const buttons = await page.locator('#actions .btn').allTextContents();
 check('メニューに「まつ」「もどる」が ある', buttons.includes('まつ') && buttons.includes('もどる'), buttons.join('/'));
 await shot(page, '05-moved');
 
+console.log('\n== とどかない場所を タップしたとき ==');
+// 実機で「動かせない」と かんちがい された ところ。
+// だまって せんたくを 解除すると こわれたように 見えるので、
+// えらんだままにして 理由を 出す。
+// 前のテストで 行動メニューが 出たままなら とじる
+if (await page.locator('#actions .btn:has-text("もどる")').count()) {
+  await page.click('#actions .btn:has-text("もどる")');
+  await page.waitForTimeout(200);
+}
+
+// アリの「いまの位置」と、そこから 届かないマスを 取り直す
+const far0 = await page.evaluate(() => {
+  const g = window.__e2e.game;
+  const u = g.unitsOf('player').find((x) => x.type === 'ant');
+  let target = null;
+  for (let y = 0; y < g.height && !target; y++)
+    for (let x = 0; x < g.width && !target; x++)
+      if (!g.canMoveTo(u, x, y) && !g.unitAt(x, y) && g.terrainAt(x, y).move.foot != null) target = { x, y };
+  return { ant: { x: u.x, y: u.y }, target };
+});
+await tapTile(far0.ant.x, far0.ant.y);
+check('虫を えらべる', (await state()).mode === 'moving');
+await tapTile(far0.target.x, far0.target.y);
+const far = await page.evaluate(() => ({
+  mode: window.__e2e.ui.mode,
+  banner: document.getElementById('banner').classList.contains('hidden')
+    ? null
+    : document.getElementById('banner').textContent,
+}));
+check('とどかない場所を タップしても せんたくは 外れない', far.mode === 'moving', far.mode);
+check('とどかない理由が 出る', !!far.banner && far.banner.includes('とどかない'), far.banner || 'なし');
+
+// 自分のマスを タップ → その場に とどまる（行動メニューが 出る）
+await tapTile(far0.ant.x, far0.ant.y);
+check('自分のマスを タップすると その場で 行動を えらべる', (await state()).mode === 'action');
+await page.click('#actions .btn:has-text("もどる")');
+await page.waitForTimeout(200);
+
+console.log('\n== チュートリアル1面の あそびやすさ ==');
+const tutorial = await page.evaluate(() => {
+  const g = window.__e2e.game;
+  const out = [];
+  for (const u of g.unitsOf('player')) {
+    if (!window.__e2e.game.spec(u).canCapture) continue;
+    const ok = [...g.props.values()].some((p) => g.terrainIdAt(p.x, p.y) === 'sap' && g.canMoveTo(u, p.x, p.y));
+    out.push(ok);
+  }
+  return out;
+});
+check('1ターン目に 樹液場へ とどく虫が いる', tutorial.some(Boolean), `占領できる虫 ${tutorial.length}体`);
+
 console.log('\n== とりけし ==');
 
+// この節だけで 完結するよう、あらためて えらんで 動かしてから 取り消す
+await tapTile(ant.x, ant.y);
+await tapTile(ant.x, ant.y - 3);
 await page.click('#actions .btn:has-text("もどる")');
 await page.waitForTimeout(250);
 s = await state();

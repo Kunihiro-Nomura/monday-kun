@@ -314,9 +314,42 @@ function tapMoving(x, y) {
     refresh();
     return;
   }
-  // 移動できない場所を タップしたら せんたく を やめる
-  cancelSelection();
-  tapIdle(x, y);
+
+  // 自分の いるマスは 移動はんいに 入っている（＝その場で 待つ）ので、
+  // ここに 来る時点で「行けないマス」を タップしている。
+  const other = game.unitAt(x, y);
+
+  // ほかの 自分の虫を タップ → そっちに 切りかえる
+  if (other && other.team === 'player' && !other.acted && game.turnTeam === 'player') {
+    ui = { mode: 'moving', unit: other, origin: { x: other.x, y: other.y }, moved: false, targets: [] };
+    setTileInfo(describeTile(x, y));
+    refresh();
+    return;
+  }
+
+  // それ以外は えらんだまま にして、「なぜ 行けないか」を つたえる。
+  // だまって えらぶのを やめると、こわれたように 見えてしまう。
+  setBanner(whyCannotMove(unit, x, y), 2000);
+  setTileInfo(describeTile(x, y));
+  refresh();
+}
+
+// なぜ そのマスへ 行けないのかを、子どもに わかる ことばで 返す
+function whyCannotMove(unit, x, y) {
+  const spec = UNITS[unit.type];
+  const terrain = game.terrainAt(x, y);
+  const other = game.unitAt(x, y);
+
+  if (other && other.team !== unit.team) {
+    return 'てきが いるよ。となりまで 行って こうげき しよう';
+  }
+  if (other) {
+    return 'なかまが いるので、そこには 止まれないよ';
+  }
+  if (terrain.move[spec.moveType] == null) {
+    return `${terrain.name}には ${spec.name}は 入れないよ`;
+  }
+  return `そこまでは とどかないよ（${spec.name}の うごきは ${spec.move}）`;
 }
 
 async function tapTarget(x, y) {

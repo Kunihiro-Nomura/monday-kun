@@ -26,8 +26,15 @@ const args = process.argv.slice(2);
 let targets;
 
 if (args.length === 0 || args[0] === '--todo') {
-  targets = orders.orders.filter((o) => o.status !== 'done').sort((a, b) => a.priority - b.priority);
+  // まだ 発注していない ぶん だけ。
+  // 発注ずみ（ordered）を 外すのは、同じ絵を 2つの経路で 二重発注しないため。
+  targets = orders.orders.filter((o) => o.status === 'todo').sort((a, b) => a.priority - b.priority);
   if (args.length === 0) targets = targets.slice(0, 1); // 引数なしなら 最優先の1件だけ
+
+  if (!targets.length) {
+    console.error('未発注の項目は ありません（orders.json の status を確認してください）');
+    process.exit(0);
+  }
 } else {
   targets = args.map((id) => {
     const o = orders.orders.find((x) => x.id === id);

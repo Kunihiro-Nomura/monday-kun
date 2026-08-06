@@ -38,7 +38,8 @@
       "priority": 1,
       "featureJa": "光沢のある赤褐色。体長の約3分の1の頭角で、先端がコンパクトに二分岐する。胸にも小さな突起。過度に長い枝角状にはしない",
       "featureEn": "Glossy reddish-brown. A head horn about one third of body length, forking compactly at the tip. A small thoracic projection. Do not make it a long antler-like horn.",
-      "status": "todo"
+      "status": "ordered",
+      "orderedVia": "B（貼るだけ発注書）"
     },
     {
       "id": "ant",
@@ -418,5 +419,6 @@
       "featureEn": "Pitcher-shaped trap mottled green and red, with the lid open above.",
       "status": "todo"
     }
-  ]
+  ],
+  "_status_values": "todo（未発注） / ordered（発注ずみ・納品待ち） / done（納品ずみ）"
 }

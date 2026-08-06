@@ -1,4 +1,6 @@
 {
   "_comment": "このファイルは scripts/build-manifest.mjs が自動生成します。手で編集しないでください。PNG を game/assets/units/ に置けば反映されます。",
-  "units": []
+  "units": [
+    "kabuto"
+  ]
 }

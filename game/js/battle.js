@@ -14,6 +14,7 @@
 import { UNITS } from './data/units.js';
 import { TERRAIN } from './data/terrain.js';
 import { hpBars } from './engine.js';
+import { getSprite } from './render.js';
 
 const SETTING_KEY = 'konchu-senso/battle-anim/v1';
 const SEEN_KEY = 'konchu-senso/battle-seen/v1';
@@ -321,8 +322,16 @@ export class BattleScene {
     this.updateParticles();
     this.drawParticlesBehind();
 
-    this.drawFighter(left, leftX + lo.x * unitSize, groundY + lo.y * unitSize, unitSize, lo.rot, false, leftHp);
-    this.drawFighter(right, rightX + ro.x * unitSize, groundY + ro.y * unitSize, unitSize, ro.rot, true, rightHp);
+    // 投げとばされた虫が アリーナの帯から はみ出さないように おさえる。
+    // 虫は (y - size*0.42) を 中心に、size の 大きさで 描かれるので、
+    // 上に はみ出さない ぎりぎりは band.top + size*(0.42 + 0.5)。
+    const minY = this.band.top + unitSize * 0.95;
+    const clampY = (v) => Math.max(minY, Math.min(groundY, v));
+    const clampX = (v) => Math.max(unitSize * 0.5, Math.min(w - unitSize * 0.5, v));
+
+    // 虫は 動くが、名前と HP は 動かさない（動かすと ぶつかって 読めなくなる）
+    this.drawFighter(left, clampX(leftX + lo.x * unitSize), clampY(groundY + lo.y * unitSize), unitSize, lo.rot, false, leftHp, leftX);
+    this.drawFighter(right, clampX(rightX + ro.x * unitSize), clampY(groundY + ro.y * unitSize), unitSize, ro.rot, true, rightHp, rightX);
 
     this.drawParticlesFront();
 
@@ -402,7 +411,7 @@ export class BattleScene {
     ctx.stroke();
   }
 
-  drawFighter(side, x, y, size, rot, flip, hp) {
+  drawFighter(side, x, y, size, rot, flip, hp, labelX = x) {
     const ctx = this.ctx;
     const spec = UNITS[side.type];
     const groundY = this.band.groundY;
@@ -426,11 +435,21 @@ export class BattleScene {
     ctx.save();
     ctx.translate(x, y - size * 0.42);
     ctx.rotate(rot);
-    if (flip) ctx.scale(-1, 1);
-    ctx.font = `${Math.round(size)}px system-ui, "Apple Color Emoji", sans-serif`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(spec.icon, 0, 0);
+
+    const sprite = getSprite(side.type);
+    if (sprite) {
+      // 盤面用の「真上から」の絵を そのまま つかう。
+      // 90度 まわして 向かい合わせる案も 試したが、虫が 横倒しに 見えて しまう。
+      // ちゃんと 向かい合わせるには 横向き専用の 絵が いる（ART_SPEC §3.2）。
+      // それが そろうまでは、立ったまま 見せる。
+      ctx.drawImage(sprite, -size / 2, -size / 2, size, size);
+    } else {
+      if (flip) ctx.scale(-1, 1);
+      ctx.font = `${Math.round(size)}px system-ui, "Apple Color Emoji", sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(spec.icon, 0, 0);
+    }
     ctx.restore();
 
     // 名前と HP
@@ -441,15 +460,15 @@ export class BattleScene {
     ctx.textBaseline = 'alphabetic';
     ctx.lineWidth = 3;
     ctx.strokeStyle = 'rgba(0,0,0,0.75)';
-    ctx.strokeText(spec.name, x, barY);
+    ctx.strokeText(spec.name, labelX, barY);
     ctx.fillStyle = '#fff';
-    ctx.fillText(spec.name, x, barY);
+    ctx.fillText(spec.name, labelX, barY);
 
     const bars = Math.max(0, hpBars(hp));
     const segW = barW / 10;
     for (let i = 0; i < 10; i++) {
       ctx.fillStyle = i < bars ? (side.team === 'player' ? '#4fa3ff' : '#ff6b52') : 'rgba(0,0,0,0.45)';
-      ctx.fillRect(x - barW / 2 + i * segW + 1, barY + 8, segW - 2, size * 0.1);
+      ctx.fillRect(labelX - barW / 2 + i * segW + 1, barY + 8, segW - 2, size * 0.1);
     }
   }
 

@@ -12,7 +12,10 @@
     "noShadow": true,
     "noAnthropomorphism": true,
     "noTeamColor": "虫は実物の色のまま。青軍・赤軍はゲーム側が台座で表現する",
-    "backgrounds": { "green": "#00FF00", "magenta": "#FF00FF" }
+    "backgrounds": {
+      "green": "#00FF00",
+      "magenta": "#FF00FF"
+    }
   },
   "sizeClasses": {
     "tiny": 0.35,
@@ -25,6 +28,7 @@
     {
       "id": "kabuto",
       "name": "カブトムシ",
+      "nameEn": "Japanese rhinoceros beetle",
       "scientificName": "Trypoxylus dichotomus",
       "classification": "insect",
       "sizeClass": "large",
@@ -39,6 +43,7 @@
     {
       "id": "ant",
       "name": "アリ",
+      "nameEn": "Japanese black ant",
       "scientificName": "Formica japonica",
       "classification": "insect",
       "sizeClass": "tiny",
@@ -53,6 +58,7 @@
     {
       "id": "kuwagata",
       "name": "オオクワガタ",
+      "nameEn": "Japanese stag beetle",
       "scientificName": "Dorcus hopei",
       "classification": "insect",
       "sizeClass": "large",
@@ -67,6 +73,7 @@
     {
       "id": "mantis",
       "name": "カマキリ",
+      "nameEn": "Japanese giant mantis",
       "scientificName": "Tenodera sinensis",
       "classification": "insect",
       "sizeClass": "medium",
@@ -81,6 +88,7 @@
     {
       "id": "dragonfly",
       "name": "オニヤンマ",
+      "nameEn": "golden-ringed dragonfly",
       "scientificName": "Anotogaster sieboldii",
       "classification": "insect",
       "sizeClass": "large",
@@ -95,6 +103,7 @@
     {
       "id": "hornet",
       "name": "オオスズメバチ",
+      "nameEn": "Asian giant hornet",
       "scientificName": "Vespa mandarinia",
       "classification": "insect",
       "sizeClass": "medium",
@@ -109,6 +118,7 @@
     {
       "id": "ladybug",
       "name": "テントウムシ",
+      "nameEn": "seven-spot ladybird",
       "scientificName": "Coccinella septempunctata",
       "classification": "insect",
       "sizeClass": "small",
@@ -123,6 +133,7 @@
     {
       "id": "bombardier",
       "name": "ミイデラゴミムシ",
+      "nameEn": "bombardier beetle",
       "scientificName": "Pheropsophus jessoensis",
       "classification": "insect",
       "sizeClass": "small",
@@ -134,10 +145,10 @@
       "featureEn": "Black and orange mottled pattern, elongated body, abdomen tip slightly raised.",
       "status": "todo"
     },
-
     {
       "id": "carpenter_ant",
       "name": "オオアリ（運搬型）",
+      "nameEn": "Japanese carpenter ant",
       "scientificName": "Camponotus japonicus",
       "classification": "insect",
       "sizeClass": "tiny",
@@ -152,6 +163,7 @@
     {
       "id": "longhorn_larva",
       "name": "テッポウムシ（カミキリ幼虫）",
+      "nameEn": "longhorn beetle larva",
       "scientificName": "Cerambycidae larva",
       "classification": "insect",
       "sizeClass": "small",
@@ -166,6 +178,7 @@
     {
       "id": "diving_beetle",
       "name": "ゲンゴロウ",
+      "nameEn": "Japanese diving beetle",
       "scientificName": "Cybister chinensis",
       "classification": "insect",
       "sizeClass": "medium",
@@ -180,6 +193,7 @@
     {
       "id": "giant_water_bug",
       "name": "タガメ",
+      "nameEn": "giant water bug",
       "scientificName": "Kirkaldyia deyrolli",
       "classification": "insect",
       "sizeClass": "medium",
@@ -195,6 +209,7 @@
     {
       "id": "hercules",
       "name": "ヘラクレスオオカブト",
+      "nameEn": "Hercules beetle",
       "scientificName": "Dynastes hercules",
       "classification": "insect",
       "sizeClass": "huge",
@@ -209,6 +224,7 @@
     {
       "id": "braconid",
       "name": "コマユバチ",
+      "nameEn": "braconid wasp",
       "scientificName": "Cotesia glomerata",
       "classification": "insect",
       "sizeClass": "small",
@@ -223,6 +239,7 @@
     {
       "id": "tachinid",
       "name": "ヤドリバエ",
+      "nameEn": "tachinid fly",
       "scientificName": "Exorista japonica",
       "classification": "insect",
       "sizeClass": "medium",
@@ -237,6 +254,7 @@
     {
       "id": "strepsiptera",
       "name": "ネジレバネ（雄）",
+      "nameEn": "male twisted-wing parasite",
       "scientificName": "Xenos moutoni",
       "classification": "insect",
       "sizeClass": "small",
@@ -252,6 +270,7 @@
     {
       "id": "horsehair_worm",
       "name": "ハリガネムシ",
+      "nameEn": "horsehair worm",
       "scientificName": "Chordodes sp.",
       "classification": "nematomorph",
       "sizeClass": "medium",
@@ -266,6 +285,7 @@
     {
       "id": "cordyceps",
       "name": "タイワンアリタケ",
+      "nameEn": "zombie-ant fungus fruiting body",
       "scientificName": "Ophiocordyceps unilateralis",
       "classification": "fungus",
       "sizeClass": "small",
@@ -280,6 +300,7 @@
     {
       "id": "ant_cricket",
       "name": "アリヅカコオロギ",
+      "nameEn": "ant-loving cricket",
       "scientificName": "Myrmecophilus sp.",
       "classification": "insect",
       "sizeClass": "tiny",
@@ -294,6 +315,7 @@
     {
       "id": "aphid",
       "name": "アブラムシ",
+      "nameEn": "aphid",
       "scientificName": "Aphididae",
       "classification": "insect",
       "sizeClass": "tiny",
@@ -308,6 +330,7 @@
     {
       "id": "kabuto_larva",
       "name": "カブトムシの幼虫",
+      "nameEn": "rhinoceros beetle grub",
       "scientificName": "larva of Trypoxylus dichotomus",
       "classification": "insect",
       "sizeClass": "medium",
@@ -322,6 +345,7 @@
     {
       "id": "dragonfly_nymph",
       "name": "ヤゴ（オニヤンマ幼虫）",
+      "nameEn": "dragonfly nymph",
       "scientificName": "larva of Anotogaster sieboldii",
       "classification": "insect",
       "sizeClass": "small",
@@ -336,6 +360,7 @@
     {
       "id": "venus_flytrap_open",
       "name": "ハエトリグサ（開）",
+      "nameEn": "Venus flytrap with its trap open",
       "scientificName": "Dionaea muscipula",
       "classification": "plant",
       "sizeClass": "medium",
@@ -350,6 +375,7 @@
     {
       "id": "venus_flytrap_closed",
       "name": "ハエトリグサ（閉）",
+      "nameEn": "Venus flytrap with its trap closed",
       "scientificName": "Dionaea muscipula",
       "classification": "plant",
       "sizeClass": "medium",
@@ -365,6 +391,7 @@
     {
       "id": "sundew",
       "name": "モウセンゴケ",
+      "nameEn": "round-leaved sundew",
       "scientificName": "Drosera rotundifolia",
       "classification": "plant",
       "sizeClass": "small",
@@ -379,6 +406,7 @@
     {
       "id": "pitcher_plant",
       "name": "ウツボカズラ",
+      "nameEn": "tropical pitcher plant",
       "scientificName": "Nepenthes sp.",
       "classification": "plant",
       "sizeClass": "medium",

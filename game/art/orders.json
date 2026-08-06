@@ -15,7 +15,9 @@
     "backgrounds": {
       "green": "#00FF00",
       "magenta": "#FF00FF"
-    }
+    },
+    "preferDirectTransparent": "可能なら生成時点で透過PNGを直接出力すること。単色背景からの切り抜きは、光沢面に背景色が映りこむ「色かぶり」が起きるため次善策とする",
+    "spillWarning": "緑背景で切り抜くと、つやのある暗色の被写体（カブトムシ等）の上翅にオリーブ色の色かぶりが出やすい。切り抜き時は色かぶり除去（spill suppression）を行うこと"
   },
   "sizeClasses": {
     "tiny": 0.35,

@@ -179,6 +179,10 @@ export class AI {
     const report = { unit, from, to: { x: unit.x, y: unit.y }, type: action.type, result: null };
 
     if (action.type === 'attack') {
+      // 戦闘カットインの 再生に つかうので、こうげき前の HP を おぼえておく
+      report.target = action.target;
+      report.hpBefore = { attacker: unit.hp, defender: action.target.hp };
+      report.terrainId = g.terrainIdAt(action.target.x, action.target.y);
       report.result = g.attack(unit, action.target);
     } else if (action.type === 'capture') {
       report.result = g.capture(unit);

@@ -23,6 +23,7 @@ export const UNITS = {
     maxRange: 1,
     canCapture: true,
     vision: 2,
+    motion: 'bite', // 戦闘アニメの型（battle.js）
     bio: {
       size: '体長 2〜12mm くらい（しゅるいによる）',
       where: '土の中や木の下。日本中どこにでもいる',
@@ -30,6 +31,7 @@ export const UNITS = {
       season: '春〜秋',
       fact: '自分の体重の 50倍いじょう の物を持ちあげられる とんでもない力もち。',
       why: '巣で何万びきも くらす社会性昆虫なので、安く たくさん 出せる。占領できるのはアリのなかまだけ。',
+      fight: '大アゴで かみつく。なかまが 多いときは みんなで 群がって おそう。',
     },
   },
 
@@ -46,6 +48,7 @@ export const UNITS = {
     maxRange: 1,
     canCapture: true,
     vision: 2,
+    motion: 'slash', // 戦闘アニメの型（battle.js）
     bio: {
       size: '体長 7〜9cm くらい（オオカマキリ）',
       where: '草はらや やぶ。えものを じっと まちぶせする',
@@ -53,6 +56,7 @@ export const UNITS = {
       season: '夏〜秋',
       fact: 'カマをふりかぶって えものを つかまえるまで たった 0.05秒。まばたきより はやい。',
       why: '飛んでいる虫を カマで つかまえる ハンター。だから 地上にいながら 空の虫と たたかえる。',
+      fight: 'カマを ふりかぶって 一しゅんで つかまえる。その はやさ 0.05びょう。',
     },
   },
 
@@ -69,6 +73,7 @@ export const UNITS = {
     maxRange: 1,
     canCapture: false,
     vision: 5,
+    motion: 'bite', // 戦闘アニメの型（battle.js）
     bio: {
       size: '体長 5〜8mm くらい（ナナホシテントウ）',
       where: '草はらや畑。アブラムシのいる草の上',
@@ -76,6 +81,7 @@ export const UNITS = {
       season: '春〜秋',
       fact: 'おそわれると あしの関節から 黄色くて にがい しるを出して 身をまもる。',
       why: 'すばしっこく 動きまわって えものを さがす虫。だから 移動きょりが 長く、遠くまで 見わたせる。',
+      fight: '体当たりで ぶつかる。おそわれると あしの関節から 黄色い しるを 出す。',
     },
   },
 
@@ -92,6 +98,7 @@ export const UNITS = {
     maxRange: 1,
     canCapture: false,
     vision: 3,
+    motion: 'charge', // 戦闘アニメの型（battle.js）
     bio: {
       size: '体長 3〜5cm くらい（ツノをふくむ）',
       where: 'クヌギやコナラの雑木林。夜に樹液に集まる',
@@ -99,6 +106,7 @@ export const UNITS = {
       season: '夏（7〜8月ごろ）',
       fact: '頭の大きなツノで あいてを すくい上げて 投げとばす。「昆虫の王さま」とよばれる。',
       why: 'かたい外こっかくに つつまれ、ツノで 投げとばす力もち。だから 攻げきも まもりも 高い 主力ユニット。',
+      fight: 'ツノを あいての 下に さしこんで、すくい上げて 投げとばす。',
     },
   },
 
@@ -115,6 +123,7 @@ export const UNITS = {
     maxRange: 1,
     canCapture: false,
     vision: 3,
+    motion: 'grab', // 戦闘アニメの型（battle.js）
     bio: {
       size: '体長 3〜8cm くらい（大アゴをふくむ）',
       where: 'クヌギの雑木林。木の うろ に かくれている',
@@ -122,6 +131,7 @@ export const UNITS = {
       season: '夏',
       fact: '大アゴで あいてを はさんで 動けなくする。オオクワガタは なかなか 見つからず「黒いダイヤ」とよばれた。',
       why: 'はさんだら はなさない 大アゴを持つ。だから いちばん 強いが、お金が高くて 動きは おそい。',
+      fight: '大アゴで はさみこんで 持ち上げ、あいての うごきを ふうじる。',
     },
   },
 
@@ -138,6 +148,7 @@ export const UNITS = {
     maxRange: 3,
     canCapture: false,
     vision: 2,
+    motion: 'spray', // 戦闘アニメの型（battle.js）
     bio: {
       size: '体長 1〜2cm くらい',
       where: '川原や田んぼのそば。石の下など',
@@ -145,6 +156,7 @@ export const UNITS = {
       season: '春〜秋',
       fact: 'おしりから 100度ちかい 高温のガスを ボンッ と ふき出して てきを おいはらう。「ヘッピリムシ」ともよばれる。',
       why: '遠くへ ガスを ふき出して たたかう虫。だから はなれた ばしょから こうげき でき、はんげき を うけない。かわりに 動いたターンは こうげき できない。',
+      fight: 'おしりを あいてに 向けて、100度ちかい 高温のガスを ボンッ と ふき出す。',
     },
   },
 
@@ -161,6 +173,7 @@ export const UNITS = {
     maxRange: 1,
     canCapture: false,
     vision: 4,
+    motion: 'dive', // 戦闘アニメの型（battle.js）
     bio: {
       size: '体長 3〜4cm くらい（オオスズメバチ）',
       where: '林の中や土の中に大きな巣をつくる',
@@ -168,6 +181,7 @@ export const UNITS = {
       season: '夏〜秋（秋がいちばん きけん）',
       fact: '1回の飛行で 数百メートル〜数キロも とべる。強いどくばりを持つので、見つけても ぜったいに ちかづかないこと。',
       why: '遠くまで とんでいって 強いどくばりで さす。だから 地上の虫に とても 強い。ただし 空の虫とは たたかえない。',
+      fight: '空から きゅうこうか して、するどい どくばりで さす。',
     },
   },
 
@@ -184,6 +198,7 @@ export const UNITS = {
     maxRange: 1,
     canCapture: false,
     vision: 5,
+    motion: 'catch', // 戦闘アニメの型（battle.js）
     bio: {
       size: '体長 9〜11cm くらい（日本さいだいのトンボ）',
       where: 'きれいな小川や わき水のあるところ',
@@ -191,6 +206,7 @@ export const UNITS = {
       season: '夏',
       fact: '4まいの はねを 1まいずつ べつべつに 動かせるので、空中で ピタッと止まったり きゅうに 曲がったり できる。',
       why: '空中で スズメバチさえ つかまえて 食べる 空の王者。だから 飛ぶ虫との たたかいに めっぽう 強く、移動も いちばん はやい。',
+      fight: '空中で あしを かごのように 広げて、あいてを つかまえる。',
     },
   },
 };

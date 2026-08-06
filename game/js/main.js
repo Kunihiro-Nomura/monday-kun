@@ -7,6 +7,7 @@
 import { Game, hpBars, distance } from './engine.js';
 import { AI } from './ai.js';
 import { Renderer, TEAM_COLOR, TEAM_LABEL, loadSprites } from './render.js';
+import { BattleScene, getBattleMode, setBattleMode, hasSeenFight } from './battle.js';
 import { MAPS, getMap } from './data/maps.js';
 import { UNITS, baseDamage } from './data/units.js';
 import { TERRAIN } from './data/terrain.js';
@@ -136,6 +137,19 @@ let game = null;
 let ai = null;
 let renderer = null;
 let currentMap = null;
+const battle = new BattleScene(document.getElementById('battle'));
+
+// engine.attack() の けっかを 戦闘カットインで 再生する。
+// 勝ち負けは すでに engine が 決めているので、ここは 見せるだけ。
+function playBattle(attacker, defender, before, result) {
+  return battle.play({
+    attacker: { type: attacker.type, team: attacker.team, hpBefore: before.attacker, hpAfter: attacker.hp },
+    defender: { type: defender.type, team: defender.team, hpBefore: before.defender, hpAfter: defender.hp },
+    damage: result.damage,
+    counter: result.counter,
+    terrainId: game.terrainIdAt(defender.x, defender.y),
+  });
+}
 
 // 入力の じょうたい
 // idle: なにも えらんでいない / moving: 移動先を えらぶ / action: 行動を えらぶ / target: こうげき相手を えらぶ
@@ -305,7 +319,7 @@ function tapMoving(x, y) {
   tapIdle(x, y);
 }
 
-function tapTarget(x, y) {
+async function tapTarget(x, y) {
   const target = ui.targets.find((t) => t.x === x && t.y === y);
   if (!target) {
     // えらび直し
@@ -315,7 +329,12 @@ function tapTarget(x, y) {
     return;
   }
   const attacker = ui.unit;
+  const before = { attacker: attacker.hp, defender: target.hp };
+
+  ui.mode = 'ai'; // 演出中は 操作を うけつけない
+  hideActionMenu();
   const result = game.attack(attacker, target);
+  await playBattle(attacker, target, before, result);
 
   let msg = `${UNITS[attacker.type].name} の こうげき！`;
   if (result.defenderDied) msg += `　${UNITS[target.type].name} は にげていった`;
@@ -442,10 +461,33 @@ document.getElementById('btn-endturn').addEventListener('click', () => {
 });
 
 document.getElementById('btn-quit').addEventListener('click', () => {
-  openModal('<h2>ゲームを やめる？</h2><p>とちゅうの たたかいは きえてしまうよ。</p>', [
-    { label: 'やめる', className: 'danger', onClick: () => show('stages') },
-    { label: 'つづける', className: 'ghost' },
-  ]);
+  const modes = [
+    ['auto', 'はじめて見る くみあわせだけ くわしく（おすすめ）'],
+    ['full', 'いつも くわしく'],
+    ['short', 'いつも みじかく'],
+    ['off', 'なし'],
+  ];
+  const current = getBattleMode();
+  const options = modes
+    .map(([v, label]) => `<button class="produce-item" data-mode="${v}">${current === v ? '● ' : '○ '}${label}</button>`)
+    .join('');
+
+  openModal(
+    `<h2>せってい</h2><p><b>たたかいの アニメ</b></p>${options}
+     <p style="margin-top:14px">ゲームを やめると、とちゅうの たたかいは きえてしまうよ。</p>`,
+    [
+      { label: 'ゲームを やめる', className: 'danger', onClick: () => show('stages') },
+      { label: 'つづける', className: 'ghost' },
+    ]
+  );
+
+  modalBody.querySelectorAll('[data-mode]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      setBattleMode(btn.dataset.mode);
+      closeModal();
+      setBanner('せっていを かえたよ', 1200);
+    });
+  });
 });
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -463,11 +505,25 @@ async function runAITurn() {
     if (!report) break;
 
     discover([report.unit.type]);
-    renderer.draw();
     // 画面の そとで 起きたことも 見えるように、動いた虫に カメラを よせる
     if (isOffScreen(report.to.x, report.to.y)) renderer.centerOn(report.to.x, report.to.y);
     renderer.draw();
-    await sleep(320);
+
+    if (report.type === 'attack' && report.result) {
+      discover([report.target.type]);
+      await sleep(200);
+      await battle.play({
+        attacker: { type: report.unit.type, team: report.unit.team, hpBefore: report.hpBefore.attacker, hpAfter: report.unit.hp },
+        defender: { type: report.target.type, team: report.target.team, hpBefore: report.hpBefore.defender, hpAfter: report.target.hp },
+        damage: report.result.damage,
+        counter: report.result.counter,
+        terrainId: report.terrainId,
+      });
+      renderer.draw();
+      await sleep(120);
+    } else {
+      await sleep(320);
+    }
   }
 
   if (game.status === 'playing') {
@@ -584,6 +640,7 @@ function renderZukan() {
           <dt>であえる きせつ</dt><dd>${u.bio.season}</dd>
           <dt>すごい ところ</dt><dd>${u.bio.fact}</dd>
           ${dmgRow.length ? `<dt>とくいな あいて</dt><dd>${dmgRow.join('、')}</dd>` : ''}
+          ${hasSeenFight(u.id) ? `<dt>たたかい方</dt><dd>${u.bio.fight}</dd>` : '<dt>たたかい方</dt><dd style="opacity:.5">たたかうところを 見ると わかるよ</dd>'}
         </dl>
         <div class="zukan-why"><b>ゲームで つよい りゆう</b><br>${u.bio.why}</div>
       </div>`;

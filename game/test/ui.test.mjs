@@ -121,6 +121,58 @@ if (capButtons.includes('せんりょう')) {
   check('せんりょうが すすむ', progressed < 20, `のこり ${progressed}`);
 }
 
+console.log('\n== 戦闘カットイン ==');
+
+// カブトムシを 敵アリの となりに おいて こうげき させる
+const fight = await page.evaluate(() => {
+  const g = window.__e2e.game;
+  const kab = g.unitsOf('player').find((u) => u.type === 'kabuto');
+  const ant = g.unitsOf('enemy').find((u) => u.type === 'ant');
+  kab.x = ant.x;
+  kab.y = ant.y + 1;
+  kab.acted = false;
+  window.__e2e.renderer.draw();
+  return { kx: kab.x, ky: kab.y, ax: ant.x, ay: ant.y, antHp: ant.hp };
+});
+
+await tapTile(fight.kx, fight.ky);
+await tapTile(fight.kx, fight.ky);
+const atkButtons = await page.locator('#actions .btn').allTextContents();
+check('となりに敵がいると「こうげき」が 出る', atkButtons.includes('こうげき'), atkButtons.join('/'));
+
+await page.click('#actions .btn:has-text("こうげき")');
+await page.waitForTimeout(200);
+await tapTile(fight.ax, fight.ay);
+await page.waitForTimeout(350);
+
+const during = await page.evaluate(() => ({
+  visible: !document.getElementById('battle').classList.contains('hidden'),
+  mode: window.__e2e.ui.mode,
+}));
+check('戦闘カットインが 出る', during.visible);
+check('演出中は 盤面の操作を うけつけない', during.mode === 'ai', during.mode);
+await shot(page, '06-battle');
+
+// 演出が かならず 終わって 盤面に もどること（止まったままにならない）
+await page.waitForFunction(() => document.getElementById('battle').classList.contains('hidden'), null, { timeout: 8000 });
+const after = await page.evaluate(() => ({ mode: window.__e2e.ui.mode }));
+check('演出が 終わって 操作に もどる', after.mode === 'idle', after.mode);
+
+const dmgApplied = await page.evaluate((f) => {
+  const g = window.__e2e.game;
+  const ant = g.unitAt(f.ax, f.ay);
+  return ant ? ant.hp : 0;
+}, fight);
+check('ダメージが 盤面に 反映されている', dmgApplied < fight.antHp, `HP ${fight.antHp} → ${dmgApplied}`);
+
+// 一度 たたかうと 図鑑に「たたかい方」が のる
+await page.evaluate(() => window.__e2e.show('zukan'));
+await page.waitForTimeout(250);
+const zukanText = await page.locator('.zukan-card:not(.unknown)').first().innerText();
+check('図鑑に「たたかい方」の欄が できる', zukanText.includes('たたかい方'));
+await page.evaluate(() => window.__e2e.show('game'));
+await page.waitForTimeout(200);
+
 console.log('\n== 生産 ==');
 
 const nest = await page.evaluate(() => {

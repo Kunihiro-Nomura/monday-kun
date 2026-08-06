@@ -15,6 +15,7 @@ const ASSETS = [
   './js/engine.js',
   './js/ai.js',
   './js/render.js',
+  './js/battle.js',
   './js/data/units.js',
   './js/data/terrain.js',
   './js/data/maps.js',

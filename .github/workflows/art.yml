@@ -1,0 +1,66 @@
+name: グラフィックの受け入れ
+
+# グラフィック担当（ChatGPT / Codex）が絵を push したら自動で動く。
+# 1. 仕様どおりかを検査する（透過・サイズ・占有率・余白）
+# 2. manifest.json を作り直してコミットする
+# → 人間が manifest を手で書いたり、目視で1枚ずつ確認したりしなくてよくなる。
+
+on:
+  push:
+    paths:
+      - 'game/assets/units/**'
+      - 'game/art/orders.json'
+      - 'scripts/**'
+  pull_request:
+    paths:
+      - 'game/assets/units/**'
+      - 'game/art/orders.json'
+      - 'scripts/**'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: manifest.json を作り直す
+        run: node scripts/build-manifest.mjs
+
+      - name: 更新された manifest をコミット
+        # PR 側のブランチに直接書き戻す。fork からの PR では書き込めないので、
+        # そのときは検査だけ通して次のステップに進む。
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        run: |
+          if [ -n "$(git status --porcelain game/assets/units/manifest.json)" ]; then
+            git config user.name  'github-actions[bot]'
+            git config user.email 'github-actions[bot]@users.noreply.github.com'
+            git add game/assets/units/manifest.json
+            git commit -m 'manifest.json を自動更新'
+            git push
+          else
+            echo 'manifest.json に変更はありません'
+          fi
+
+      - name: スプライトの受け入れ検査
+        run: node scripts/check-assets.mjs
+
+  game-tests:
+    # 絵を差し替えてもゲームが壊れていないことを確認する
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: ルールの単体テスト
+        run: node game/test/engine.test.mjs

@@ -322,6 +322,48 @@ console.log('\n== 寄生・のっとり ==');
   check('のっとった虫は 毎ターン 弱る', hpAfter < hpBefore, `${hpBefore} → ${hpAfter}`);
 }
 
+console.log('\n== マップエディタ ==');
+// エディタの 出力が maps.js の 形と ずれると、貼ったとたんに 面が こわれる。
+// 「読みこんで → 出して → もとと 同じか」を 全部の面で ためす。
+{
+  const ed = await ctx.newPage();
+  const edErrors = [];
+  ed.on('pageerror', (e) => edErrors.push(e.message));
+  await ed.goto(`${BASE}/tools/editor.html`, { waitUntil: 'networkidle' });
+  await ed.waitForTimeout(300);
+
+  const ids = await ed.$$eval('#load option', (os) => os.map((o) => o.value));
+  check('エディタが ぜんぶの面を 読める', ids.length >= 8, `${ids.length}面`);
+
+  const diffs = [];
+  for (const id of ids) {
+    await ed.selectOption('#load', id);
+    await ed.click('#btn-load');
+    await ed.waitForTimeout(60);
+    const text = await ed.inputValue('#out');
+    // 出した文字列を そのまま 評価して、もとの面と くらべる
+    const same = await ed.evaluate(async (src) => {
+      const { getMap } = await import('../js/data/maps.js');
+      const produced = eval(`(${src.trim().replace(/,$/, '')})`);
+      const original = getMap(produced.id);
+      const norm = (m) => JSON.stringify({
+        id: m.id, world: m.world, stage: m.stage, name: m.name, hint: m.hint,
+        aiLevel: m.aiLevel, startFunds: m.startFunds,
+        incomePerProperty: m.incomePerProperty ?? 1000,
+        rows: m.rows,
+        owners: [...(m.owners || [])].sort((a, b) => a.y - b.y || a.x - b.x),
+        units: [...(m.units || [])].sort((a, b) => a.y - b.y || a.x - b.x),
+        steps: m.steps || [],
+      });
+      return norm(produced) === norm(original);
+    }, text);
+    if (!same) diffs.push(id);
+  }
+  check('読みこんで 出しなおすと もとと 同じに なる', diffs.length === 0, diffs.length ? `ずれた面: ${diffs.join('、')}` : `${ids.length}面 すべて 一致`);
+  check('エディタで JSエラーが 出ない', edErrors.length === 0, edErrors.join(' / '));
+  await ed.close();
+}
+
 console.log('\n== 昆虫ずかん ==');
 
 await page.evaluate(() => window.__e2e.show('zukan'));

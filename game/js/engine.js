@@ -60,7 +60,14 @@ export class Game {
 
     this.units = (mapData.units || []).map((u) => this.makeUnit(u.type, u.team, u.x, u.y));
 
-    this.funds = { player: mapData.startFunds || 0, enemy: mapData.startFunds || 0 };
+    // はじめの お金。数を 1つ 書けば 両チーム 同じ、
+    // { player, enemy } と 書けば かたほうを 有利・不利に できる。
+    // 「はじめは 不利だが 立てなおす」ような 面を つくるのに いる（PLAN.md §4）。
+    const funds = mapData.startFunds || 0;
+    this.funds =
+      typeof funds === 'number'
+        ? { player: funds, enemy: funds }
+        : { player: funds.player || 0, enemy: funds.enemy || 0 };
     this.income = mapData.incomePerProperty || 1000;
     this.turnTeam = 'player';
     this.turnCount = 1;

@@ -140,7 +140,6 @@ export const MAPS = [
       { x: 7, y: 8, type: 'ant', team: 'player' },
       { x: 8, y: 8, type: 'kabuto', team: 'player' },
       { x: 1, y: 2, type: 'ant', team: 'enemy' },
-      { x: 3, y: 2, type: 'ant', team: 'enemy' },
       { x: 2, y: 1, type: 'kabuto', team: 'enemy' },
     ],
   },
@@ -193,7 +192,9 @@ export const MAPS = [
     name: '花畑からの ふいうち',
     hint: '花畑（ピンク）では 飛ぶ虫を つくれる。カマキリは 飛ぶ虫と たたかえるぞ。',
     aiLevel: 1,
-    startFunds: 12000,
+    // 敵は はじめから スズメバチを 持っている。
+    // その ぶん、あお側に 対空の虫を すぐ つくれる お金を わたす。
+    startFunds: { player: 22000, enemy: 6000 },
     incomePerProperty: 1000,
     rows: [
       '............',
@@ -222,6 +223,7 @@ export const MAPS = [
       { x: 9, y: 10, type: 'ant', team: 'player' },
       { x: 10, y: 10, type: 'kabuto', team: 'player' },
       { x: 7, y: 10, type: 'mantis', team: 'player' },
+      { x: 6, y: 10, type: 'mantis', team: 'player' },
       { x: 1, y: 2, type: 'ant', team: 'enemy' },
       { x: 3, y: 2, type: 'ant', team: 'enemy' },
       { x: 2, y: 1, type: 'kabuto', team: 'enemy' },
@@ -242,7 +244,7 @@ export const MAPS = [
     name: 'はじめての 寄生',
     hint: 'コマユバチは こうげき できない。となりの敵に「とりつく」と、あいてが 弱っていくよ。',
     aiLevel: 2,
-    startFunds: 14000,
+    startFunds: { player: 12000, enemy: 6000 },
     incomePerProperty: 1000,
     rows: [
       '............',
@@ -269,6 +271,7 @@ export const MAPS = [
       { x: 9, y: 10, type: 'ant', team: 'player' },
       { x: 10, y: 10, type: 'kabuto', team: 'player' },
       { x: 7, y: 10, type: 'komayubachi', team: 'player' },
+      { x: 6, y: 10, type: 'mantis', team: 'player' },
       { x: 1, y: 2, type: 'ant', team: 'enemy' },
       { x: 2, y: 1, type: 'ant', team: 'enemy' },
       { x: 3, y: 2, type: 'kabuto', team: 'enemy' },
@@ -288,7 +291,7 @@ export const MAPS = [
     name: '池と ハリガネムシ',
     hint: 'ハリガネムシに とりつかれた虫は、2ターン後に 水へ 歩き出して しずむ。自分の じんちで 休めば なおるよ。',
     aiLevel: 2,
-    startFunds: 16000,
+    startFunds: { player: 10000, enemy: 8000 },
     incomePerProperty: 1000,
     rows: [
       '............',
@@ -333,7 +336,7 @@ export const MAPS = [
     name: 'のっとりの ちから',
     hint: 'タイワンアリタケは、HPが 半分いかの 敵を 味方に できる。ただし のっとった虫は 毎ターン 弱っていく。',
     aiLevel: 2,
-    startFunds: 20000,
+    startFunds: { player: 10000, enemy: 8000 },
     incomePerProperty: 1000,
     rows: [
       '.............',
@@ -360,6 +363,8 @@ export const MAPS = [
       { x: 9, y: 10, type: 'ant', team: 'player' },
       { x: 10, y: 10, type: 'kabuto', team: 'player' },
       { x: 7, y: 10, type: 'aritake', team: 'player' },
+      { x: 6, y: 10, type: 'bombardier', team: 'player' },
+      { x: 5, y: 10, type: 'bombardier', team: 'player' },
       { x: 1, y: 2, type: 'ant', team: 'enemy' },
       { x: 2, y: 1, type: 'ant', team: 'enemy' },
       { x: 3, y: 2, type: 'kabuto', team: 'enemy' },

@@ -281,25 +281,39 @@ export class AI {
 
       const world = g.mapData.world || 99;
       const mine = g.unitsOf(this.team);
-      // 寄生ユニットは こうげき力が ゼロ。数を そろえると 何も できない軍に なるので、
-      // 1ぴき だけに かぎる。まもって 運ぶ 本隊が いてこそ 生きる。
-      const hasParasite = mine.some((u) => UNITS[u.type].parasite);
-
-      const affordable = producibleAt(kind, world)
-        .filter((u) => u.cost <= g.funds[this.team])
-        .filter((u) => !(u.parasite && (hasParasite || mine.length < 3)));
+      const affordable = producibleAt(kind, world).filter((u) => u.cost <= g.funds[this.team]);
       if (!affordable.length) continue;
 
-      // お金を ためこまず、そのとき 買える中で 強い虫を えらぶ。
-      // ただし 占領する虫が いなくなると こまるので、たまに アリも まぜる。
+      const priciest = (list) => list.reduce((a, b) => (a.cost > b.cost ? a : b));
+      const fighters = affordable.filter((u) => !u.parasite);
+      const parasites = affordable.filter((u) => u.parasite);
+
+      // 寄生ユニットは こうげき力が ゼロ。ねだんは 高いが「強い虫」では ない。
+      // ねだん順に えらぶと ハリガネムシ(12000)を カブトムシ(7000)より 先に 買ってしまい、
+      // 何も こうげき できない軍に なる。
+      //
+      // なので 寄生ユニットは「ぜいたく品」として あつかう。
+      // 本隊が そろっていて、しかも 買っても なお 戦う虫を 1体 買えるだけの
+      // お金が あるときにしか 手を出さない。回数では なく お金で 線を 引くのは、
+      // 面ごとの 事情（収入・拠点の数）に ひとりでに 合うから。
+      const fighterCount = mine.filter((u) => !UNITS[u.type].parasite).length;
+      const hasParasite = mine.some((u) => UNITS[u.type].parasite);
+      const luxury =
+        !hasParasite &&
+        fighterCount >= 5 &&
+        parasites.length > 0 &&
+        fighters.length > 0 &&
+        g.funds[this.team] >= priciest(parasites).cost + priciest(fighters).cost;
+
+      // 占領する虫が いなくなると 収入が 止まるので、そこは 最ゆうせん
       const needCapturer = mine.filter((u) => UNITS[u.type].canCapture).length < 2;
       const capturers = affordable.filter((u) => u.canCapture);
+
       let pick;
-      if (needCapturer && capturers.length) {
-        pick = capturers.reduce((a, b) => (a.cost > b.cost ? a : b));
-      } else {
-        pick = affordable.reduce((a, b) => (a.cost > b.cost ? a : b));
-      }
+      if (needCapturer && capturers.length) pick = priciest(capturers);
+      else if (luxury) pick = priciest(parasites);
+      else if (fighters.length) pick = priciest(fighters);
+      else continue; // 寄生ユニットしか 買えないなら 買わずに お金を のこす
 
       const unit = g.produce(base.x, base.y, pick.id, this.team);
       if (unit) made.push(unit);

@@ -143,6 +143,29 @@ html, body {
   white-space: nowrap;
 }
 
+/* はじめて あそぶ人への 手びき。盤面の下に出して、操作のじゃまをしない */
+.tutorial {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  background: rgba(245, 224, 122, 0.96);
+  color: #2a2205;
+  border-radius: 14px;
+  padding: 12px 14px;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.6;
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.4);
+  z-index: 5;
+  pointer-events: none;
+  animation: tutorial-pop 0.25s ease-out;
+}
+@keyframes tutorial-pop {
+  from { transform: translateY(8px); opacity: 0; }
+  to   { transform: translateY(0);   opacity: 1; }
+}
+
 .tileinfo {
   flex: 0 0 auto;
   background: #22301c;

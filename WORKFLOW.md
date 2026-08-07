@@ -64,14 +64,15 @@ Claude と ChatGPT は別の会社の別の製品なので、**両者を直接�
 
 ### ⚠️ 先に必要な準備
 
-作業内容は現在 `claude/famicom-wars-clone-plan-fldpmj` ブランチにあり、
-**`main` にはまだ `index.html` しかありません。**
-このまま ChatGPT にリポジトリを見せても、`AGENTS.md` も発注書も見つかりません。
+`AGENTS.md` と `game/art/orders.json` は **すでに `main` にあります**。
+ChatGPT にリポジトリを見せれば、そのまま読めます。
 
-→ **先にこのブランチを `main` にマージしてください。**
-（GitHub Pages で公開するのにも `main` へのマージが必要です）
+ただし**新しく足した発注（寄生4体）と発注書は、作業ブランチにしかありません。**
+`claude/famicom-wars-clone-plan-fldpmj` を `main` にマージしてから渡してください。
 
 ### ChatGPT に貼る文（これだけ）
+
+はじめて渡すとき:
 
 ```
 このリポジトリ https://github.com/Kunihiro-Nomura/monday-kun の
@@ -81,20 +82,42 @@ Claude と ChatGPT は別の会社の別の製品なので、**両者を直接�
 あなたの役割・守るべき絵の仕様・納品の形式がすべて書いてあります。
 発注書は game/art/orders.json です（機械可読）。
 
-最初の仕事:
-orders.json の priority 1（id: kabuto / カブトムシ）を1体だけ作ってください。
-これが以降すべての絵のスタイル基準になるので、
-承認をもらってから残りに進みます。
+game/assets/units/kabuto.png が承認ずみの基準絵です。
+線の太さ・彩度・光の向きを、これに揃えてください。
 
-納品先: game/assets/units/kabuto.png（96×96・透過PNG）
+最初の仕事:
+orders.json の inGame が true で status が todo のものを、
+priority 順に1体ずつ作ってください。1体できるたびに見せてください。
+
+納品先: game/assets/units/<id>.png（96×96・透過PNG）
 game/assets/ 以外のファイルは変更しないでください。
 ```
 
-2体目以降は、さらに短く済みます。
+2回目以降は、これだけで通じます:
 
 ```
-orders.json の status が todo のものを、priority 順に進めてください。
-承認済みの kabuto.png をスタイル参照にして、線・彩度・光の向きを揃えてください。
+orders.json の続きを priority 順にお願いします。
+kabuto.png をスタイル参照にしてください。
+```
+
+### GitHub につながらないと言われたら
+
+`game/art/briefs/` に、**リポジトリを読まなくても仕様が全部伝わる発注書**を
+置いてあります。中身をそのままチャットに貼れば作業できます。
+
+| ファイル | 中身 |
+|---|---|
+| `A-世界1のこり7体.md` | アリ・カマキリ・テントウムシ・クワガタ・ミイデラゴミムシ・スズメバチ・オニヤンマ |
+| `B-寄生4体.md` | コマユバチ・ヤドリバエ・ハリガネムシ・タイワンアリタケ |
+
+英語プロンプトと日本語版が虫ごとに入っています。**A から先に**渡してください
+（世界1が先に遊ばれるので、そこに出る虫のほうが効きます）。
+
+自分で作り直すこともできます:
+
+```sh
+node scripts/make-brief.mjs ant mantis      # 指定した虫だけ
+node scripts/make-brief.mjs --todo          # まだ届いていないぶん全部
 ```
 
 ### うまくいかないときの確認
@@ -189,7 +212,18 @@ node scripts/make-brief.mjs               # 最優先の1体だけ
 
 ### 自動その3: ゲームが壊れていないか
 
-ルールの単体テスト（35件）も同時に走ります。
+GitHub Actions が2つ動いています。
+
+| ファイル | いつ動く | 何をする |
+|---|---|---|
+| `.github/workflows/art.yml` | `game/assets/` か `orders.json` を変えたとき | manifest 更新／絵の受け入れ検査 |
+| `.github/workflows/test.yml` | `game/` か `scripts/` を変えたとき | ルール64件／画面47件／むずかしさの計測 |
+
+画面のテストは実際に Chromium を iPhone サイズで動かします。
+**落ちたときはスクリーンショットが Actions の成果物として残る**ので、
+何が映っていたかを見てから直せます。
+
+落ちた理由は日本語で出るので、そのログをそのまま Claude や ChatGPT に渡せます。
 
 ---
 

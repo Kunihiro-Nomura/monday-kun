@@ -114,6 +114,11 @@ html, body {
 .stage-name { font-weight: 700; font-size: 16px; }
 .stage-hint { font-size: 12px; color: #aebba6; margin-top: 3px; line-height: 1.5; }
 .stage-badge { font-size: 12px; color: #f5d97a; margin-top: 4px; }
+/* 世界の 見出し */
+.stage-world { font-size: 15px; font-weight: 700; color: #f0e6c8; margin: 14px 0 6px; letter-spacing: .04em; }
+.stage-world:first-child { margin-top: 4px; }
+/* 世界の 番号が とぶところの ひとこと */
+.stage-note { font-size: 12px; color: #aebba6; line-height: 1.6; padding: 10px 12px; margin: 4px 0; border-left: 3px solid #4d6a45; }
 
 /* ---- ゲーム盤 ---- */
 .board-wrap { flex: 1; position: relative; min-height: 0; }

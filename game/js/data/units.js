@@ -8,6 +8,14 @@
 // bio の内容は昆虫ずかん（学習要素）にそのまま表示する。
 //
 // icon の絵文字はプロトタイプ用のかりの絵。あとでドット絵に差しかえる。
+//
+// fromWorld: その虫を「生産できるようになる」世界。
+//   ステージごとに 手で リストを 書くと 80面ぶん 破たんするので、世界の番号だけで きめる。
+//   （PLAN.md §4 の 解禁表と 対応。敵として 出てくるのは これとは 別で、マップが きめる）
+//
+// parasite: この虫が「とりつく」ときの 効果。
+//   寄生ユニットは こうげき力を いっさい 持たない。かわりに となりの敵に とりつく。
+//   数値の 調整は ここだけで 完結させる（engine 側に 虫の名前を 書かない）。
 
 export const UNITS = {
   ant: {
@@ -25,6 +33,7 @@ export const UNITS = {
     vision: 2,
     motion: 'bite', // 戦闘アニメの型（battle.js）
     bodyMm: 5, // 実物のおおよその体長(mm)。戦闘画面の 大きさ比べに つかう
+    fromWorld: 1, // 世界1から つくれる
     bio: {
       size: '体長 2〜12mm くらい（しゅるいによる）',
       where: '土の中や木の下。日本中どこにでもいる',
@@ -51,6 +60,7 @@ export const UNITS = {
     vision: 2,
     motion: 'slash', // 戦闘アニメの型（battle.js）
     bodyMm: 80, // 実物のおおよその体長(mm)。戦闘画面の 大きさ比べに つかう
+    fromWorld: 1, // 世界1から つくれる
     bio: {
       size: '体長 7〜9cm くらい（オオカマキリ）',
       where: '草はらや やぶ。えものを じっと まちぶせする',
@@ -77,6 +87,7 @@ export const UNITS = {
     vision: 5,
     motion: 'bite', // 戦闘アニメの型（battle.js）
     bodyMm: 7, // 実物のおおよその体長(mm)。戦闘画面の 大きさ比べに つかう
+    fromWorld: 1, // 世界1から つくれる
     bio: {
       size: '体長 5〜8mm くらい（ナナホシテントウ）',
       where: '草はらや畑。アブラムシのいる草の上',
@@ -103,6 +114,7 @@ export const UNITS = {
     vision: 3,
     motion: 'charge', // 戦闘アニメの型（battle.js）
     bodyMm: 45, // 実物のおおよその体長(mm)。戦闘画面の 大きさ比べに つかう
+    fromWorld: 1, // 世界1から つくれる
     bio: {
       size: '体長 3〜5cm くらい（ツノをふくむ）',
       where: 'クヌギやコナラの雑木林。夜に樹液に集まる',
@@ -129,6 +141,7 @@ export const UNITS = {
     vision: 3,
     motion: 'grab', // 戦闘アニメの型（battle.js）
     bodyMm: 55, // 実物のおおよその体長(mm)。戦闘画面の 大きさ比べに つかう
+    fromWorld: 1, // 世界1から つくれる
     bio: {
       size: '体長 3〜8cm くらい（大アゴをふくむ）',
       where: 'クヌギの雑木林。木の うろ に かくれている',
@@ -155,6 +168,7 @@ export const UNITS = {
     vision: 2,
     motion: 'spray', // 戦闘アニメの型（battle.js）
     bodyMm: 15, // 実物のおおよその体長(mm)。戦闘画面の 大きさ比べに つかう
+    fromWorld: 1, // 世界1から つくれる
     bio: {
       size: '体長 1〜2cm くらい',
       where: '川原や田んぼのそば。石の下など',
@@ -181,6 +195,7 @@ export const UNITS = {
     vision: 4,
     motion: 'dive', // 戦闘アニメの型（battle.js）
     bodyMm: 38, // 実物のおおよその体長(mm)。戦闘画面の 大きさ比べに つかう
+    fromWorld: 1, // 世界1から つくれる
     bio: {
       size: '体長 3〜4cm くらい（オオスズメバチ）',
       where: '林の中や土の中に大きな巣をつくる',
@@ -207,6 +222,7 @@ export const UNITS = {
     vision: 5,
     motion: 'catch', // 戦闘アニメの型（battle.js）
     bodyMm: 100, // 実物のおおよその体長(mm)。戦闘画面の 大きさ比べに つかう
+    fromWorld: 1, // 世界1から つくれる
     bio: {
       size: '体長 9〜11cm くらい（日本さいだいのトンボ）',
       where: 'きれいな小川や わき水のあるところ',
@@ -217,7 +233,167 @@ export const UNITS = {
       fight: '空中で あしを かごのように 広げて、あいてを つかまえる。',
     },
   },
+
+  // ── 寄生ユニット（外道の 生存せんりゃく）──────────────────────
+  // どれも こうげき力は ゼロ。DAMAGE表に 行を 書かないことで それを 表している。
+  // かわりに となりの敵に「とりつく」。もろいので、まもって 運ぶ虫が いる。
+  //
+  // 寄生＝わるもの、という 単純な 図式には しない。
+  // 生きのこるための やり方が いろいろ あるということを つたえる。
+
+  komayubachi: {
+    id: 'komayubachi',
+    name: 'コマユバチ',
+    kana: 'コマユバチ',
+    icon: '🦟',
+    role: '寄生（よわらせる）',
+    cost: 5000,
+    move: 4,
+    moveType: 'foot',
+    minRange: 1,
+    maxRange: 1,
+    canCapture: false,
+    vision: 3,
+    motion: 'bite',
+    bodyMm: 3,
+    fromWorld: 4,
+    parasite: {
+      kind: 'drain',
+      label: 'とりつく',
+      turns: 3, // 3ターンで 育ちきって はなれる
+      hpPerTurn: 10, // 毎ターン HP 1目もり
+      end: 'detach',
+      short: '毎ターン HPが 1へる（3ターン）',
+    },
+    bio: {
+      size: '体長 2〜5mm くらい',
+      where: 'イモムシや アブラムシの いる 草むら',
+      food: 'おとなは 花のミツ。よう虫は ほかの虫の 体の中',
+      season: '春〜秋',
+      fact: 'イモムシの 体に たまごを うみつける。よう虫は 中で そだち、大きくなると 皮を やぶって 出てくる。',
+      why: 'こうげき する 口も 針も 持たない。かわりに 相手の 体の中で そだち、じわじわ 弱らせる。',
+      fight: 'たたかわない。相手の 体に たまごを うみつけて、はなれていく。',
+    },
+  },
+
+  yadoribae: {
+    id: 'yadoribae',
+    name: 'ヤドリバエ',
+    kana: 'ヤドリバエ',
+    icon: '🪰',
+    role: '寄生（力を うばう）',
+    cost: 6000,
+    move: 5,
+    moveType: 'foot',
+    minRange: 1,
+    maxRange: 1,
+    canCapture: false,
+    vision: 3,
+    motion: 'bite',
+    bodyMm: 8,
+    fromWorld: 4,
+    parasite: {
+      kind: 'weaken',
+      label: 'とりつく',
+      turns: null, // 自分の 陣地で 休むまで ずっと つづく
+      power: 0.5, // こうげき力が 半分に なる
+      short: 'こうげき力が 半分に なる',
+    },
+    bio: {
+      size: '体長 5〜15mm くらい',
+      where: 'はらっぱや 林。えものの 虫を さがして とびまわる',
+      food: 'おとなは 花のミツ。よう虫は 寄主の 体の中',
+      season: '春〜秋',
+      fact: 'カメムシや イモムシの 体に たまごを うみつける。よう虫は 生きた まま 中を 食べて そだつ。',
+      why: '中から 体を 食べられた 虫は、力が 出せなくなる。だから こうげき力が 半分に なる。',
+      fight: 'たたかわない。とびついて たまごを うみつける。',
+    },
+  },
+
+  harigane: {
+    id: 'harigane',
+    name: 'ハリガネムシ',
+    kana: 'ハリガネムシ',
+    icon: '🪱',
+    role: '寄生（水へ みちびく）',
+    cost: 12000,
+    move: 1, // いちばん おそい。とどく前に たおすのが 正しい 対しょ法
+    moveType: 'foot',
+    minRange: 1,
+    maxRange: 1,
+    canCapture: false,
+    vision: 2,
+    motion: 'grab',
+    bodyMm: 200, // 長さは 10〜30cm ある。ただし 糸のように 細い
+    fromWorld: 5,
+    parasite: {
+      kind: 'drown',
+      label: 'とりつく',
+      turns: 2,
+      end: 'drown', // 2ターン後、水べへ 歩き出して しずむ
+      short: '2ターン後、水に 入って しずむ',
+    },
+    bio: {
+      size: '長さ 10〜30cm。でも 糸のように 細い',
+      where: '川や 池。おとなは 水の中で くらす',
+      food: 'カマキリや カマドウマの 体の中の えいよう',
+      season: '夏〜秋',
+      fact: 'カマキリの 脳に はたらきかけ、水面の 光を 目じるしに して 水へ とびこませる。そして 出てきて 水中で たまごを うむ。',
+      why: 'こうげき力は ないが、とりついた 相手を かならず 水へ みちびく。動きが とても おそいので、ちかづかれる前に たおせば こわくない。',
+      fight: 'たたかわない。体に 入りこみ、水へ 行きたいと 思わせる。',
+    },
+  },
+
+  aritake: {
+    id: 'aritake',
+    name: 'タイワンアリタケ',
+    kana: 'タイワンアリタケ',
+    icon: '🍄',
+    role: '寄生（のっとる）',
+    cost: 9000,
+    move: 2,
+    moveType: 'foot',
+    minRange: 1,
+    maxRange: 1,
+    canCapture: false,
+    vision: 2,
+    motion: 'grab',
+    bodyMm: 10,
+    fromWorld: 6,
+    parasite: {
+      kind: 'takeover',
+      label: 'のっとる',
+      needHalfHp: true, // 弱った 相手にしか きかない
+      short: '弱った 敵を 味方に する（HP 半分いか）',
+    },
+    bio: {
+      size: 'アリの 体長 5mm ほど。頭から キノコが のびる',
+      where: 'あたたかい 森の 中',
+      food: 'アリの 体そのもの',
+      season: '一年中（あたたかい ところ）',
+      fact: 'キノコの なかまが アリの 体の中で そだち、脳を つつんで 行動を あやつる。アリは 高い 葉に のぼって かみつき、そこで 動かなくなる。そして 頭から キノコが のびて 胞子を まく。',
+      why: '相手を 味方に できる かわりに、のっとった 虫は 毎ターン 弱っていき、かならず たおれる。使いすての 切りふだ。',
+      fight: 'たたかわない。胞子を つけて、その虫を 内がわから あやつる。',
+    },
+  },
 };
+
+// 寄生ユニットの もろさ。
+//
+// 寄生ユニットは たまご・よう虫・糸のように 細い虫で、まともに たたかう体では ない。
+// 上の DAMAGE表を 12×12 に ふくらませると 人が 読めなくなるので、ここだけ 1つの 数字で きめる。
+// 数字は「その虫が アリを こうげき するときの いりょく」に かける ばいりつ。
+// つまり 強い虫ほど 強く たおせる、という 順番は そのまま 残る。
+export const FRAGILITY = {
+  komayubachi: 1.05,
+  yadoribae: 1.05,
+  harigane: 0.95, // 細くて つかまえにくい
+  aritake: 1.0,
+};
+
+export function isParasite(type) {
+  return !!(UNITS[type] && UNITS[type].parasite);
+}
 
 // 攻撃力表: DAMAGE[攻撃側][防御側] = 基礎いりょく（0 は こうげき できない）
 // 昆虫どうしの じっさいの 力関係を もとに 決めている。
@@ -233,13 +409,19 @@ export const DAMAGE = {
 };
 
 export function baseDamage(attackerType, defenderType) {
-  return (DAMAGE[attackerType] && DAMAGE[attackerType][defenderType]) || 0;
+  const row = DAMAGE[attackerType];
+  if (!row) return 0; // 寄生ユニットは こうげき できない（DAMAGE表に 行が ない）
+  if (defenderType in FRAGILITY) {
+    return Math.min(120, Math.round((row.ant || 0) * FRAGILITY[defenderType]));
+  }
+  return row[defenderType] || 0;
 }
 
-// 巣（ground）と 花畑（air）で 生産できるユニット
-export function producibleAt(produceKind) {
+// 巣（ground）と 花畑（air）で 生産できるユニット。
+// world を わたすと、その世界で まだ 出てこない虫を のぞく（PLAN.md §4 の 解禁表）。
+export function producibleAt(produceKind, world = 99) {
   return Object.values(UNITS).filter((u) => {
     const kind = u.moveType === 'air' ? 'air' : 'ground';
-    return kind === produceKind;
+    return kind === produceKind && (u.fromWorld || 1) <= world;
   });
 }

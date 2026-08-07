@@ -318,6 +318,30 @@ export class Renderer {
     }
     ctx.globalAlpha = 1;
 
+    // とりつかれている虫は ひと目で わかるようにする。
+    // 見た目で わからないと、なぜ 弱っていくのかが つたわらない。
+    if (unit.zombie || unit.parasite) {
+      const zombie = !!unit.zombie;
+      ctx.strokeStyle = zombie ? '#c46bd8' : '#7de08a';
+      ctx.lineWidth = Math.max(2, size * 0.055);
+      roundRect(ctx, s.x + pad, s.y + pad, size - pad * 2, size - pad * 2, size * 0.18);
+      ctx.stroke();
+
+      const r = size * 0.15;
+      const cx = s.x + r + 3;
+      const cy = s.y + r + 3;
+      ctx.fillStyle = '#2b1b33';
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.fill();
+      // 何に とりつかれているのかを、その虫の 絵で 見せる
+      const mark = zombie ? UNITS.aritake.icon : UNITS[unit.parasite.type].icon;
+      ctx.font = `${Math.round(size * 0.2)}px system-ui, "Apple Color Emoji", sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(mark, cx, cy + 1);
+    }
+
     const bars = hpBars(unit.hp);
     if (bars < 10) {
       const r = size * 0.17;

@@ -9,6 +9,19 @@
 //
 // エンジンとデータを 分けているので、80面の 量産と 調整が しやすい。
 
+// 世界の 名まえ（PLAN.md §4 の 8世界）。
+// ステージ選択の 見出しに つかう。まだ 作っていない世界も 名まえだけ ここに ある。
+export const WORLDS = {
+  1: '草はら',
+  2: '雑木林',
+  3: '花畑と 大空',
+  4: '里山の畑',
+  5: '池と 湿地',
+  6: '朽木と 地中',
+  7: '熱帯の ジャングル',
+  8: '女王の巣',
+};
+
 export const MAPS = [
   // ── 世界1の 前半は チュートリアル ──────────────────────────
   // 実機テストで「1面が難しすぎて先に進めない」との指摘。
@@ -214,6 +227,147 @@ export const MAPS = [
       { x: 2, y: 1, type: 'kabuto', team: 'enemy' },
       { x: 4, y: 2, type: 'mantis', team: 'enemy' },
       { x: 5, y: 2, type: 'hornet', team: 'enemy' },
+    ],
+  },
+
+  // ── 寄生の 世界（PLAN.md §3.3 / §4）─────────────────────────
+  // 世界2・3（雑木林・花畑）は これから。寄生は 計画どおり 世界4以降に おく。
+  // 生産できる虫は units.js の fromWorld で きまるので、
+  // ここでは world の 番号を 書くだけで 解禁が そろう。
+
+  {
+    id: 'w4s1',
+    world: 4,
+    stage: 1,
+    name: 'はじめての 寄生',
+    hint: 'コマユバチは こうげき できない。となりの敵に「とりつく」と、あいてが 弱っていくよ。',
+    aiLevel: 2,
+    startFunds: 14000,
+    incomePerProperty: 1000,
+    rows: [
+      '............',
+      '.Q..N...S...',
+      '..S.........',
+      '....FF......',
+      '...FF...FF..',
+      '..S....F.F..',
+      '..F...F..S..',
+      '..FF....FF..',
+      '.....S......',
+      '...S....N.Q.',
+      '............',
+      '............',
+    ],
+    owners: [
+      { x: 1, y: 1, team: 'enemy' },
+      { x: 4, y: 1, team: 'enemy' },
+      { x: 8, y: 9, team: 'player' },
+      { x: 10, y: 9, team: 'player' },
+    ],
+    units: [
+      { x: 8, y: 10, type: 'ant', team: 'player' },
+      { x: 9, y: 10, type: 'ant', team: 'player' },
+      { x: 10, y: 10, type: 'kabuto', team: 'player' },
+      { x: 7, y: 10, type: 'komayubachi', team: 'player' },
+      { x: 1, y: 2, type: 'ant', team: 'enemy' },
+      { x: 2, y: 1, type: 'ant', team: 'enemy' },
+      { x: 3, y: 2, type: 'kabuto', team: 'enemy' },
+      { x: 5, y: 1, type: 'mantis', team: 'enemy' },
+    ],
+    steps: [
+      { on: 'start', text: 'コマユバチ（🦟）を つれてきた。この虫は こうげき できないよ。' },
+      { on: 'select', text: '敵の となりまで つれていこう。もろいので、カブトムシで まもってあげてね。' },
+      { on: 'infest', text: 'とりついた！ あいては 毎ターン 弱っていく。じつは これ、ほんとうに ある 生き方だよ。' },
+    ],
+  },
+
+  {
+    id: 'w5s1',
+    world: 5,
+    stage: 1,
+    name: '池と ハリガネムシ',
+    hint: 'ハリガネムシに とりつかれた虫は、2ターン後に 水へ 歩き出して しずむ。自分の じんちで 休めば なおるよ。',
+    aiLevel: 2,
+    startFunds: 16000,
+    incomePerProperty: 1000,
+    rows: [
+      '............',
+      '.Q..N...S...',
+      '..S.........',
+      '....~~~.....',
+      '...WWWW.....',
+      '..S.WWW..F..',
+      '..F..~~..S..',
+      '..FF....FF..',
+      '.....S......',
+      '...S....N.Q.',
+      '............',
+      '............',
+    ],
+    owners: [
+      { x: 1, y: 1, team: 'enemy' },
+      { x: 4, y: 1, team: 'enemy' },
+      { x: 8, y: 9, team: 'player' },
+      { x: 10, y: 9, team: 'player' },
+    ],
+    units: [
+      { x: 8, y: 10, type: 'ant', team: 'player' },
+      { x: 9, y: 10, type: 'ant', team: 'player' },
+      { x: 10, y: 10, type: 'kabuto', team: 'player' },
+      { x: 7, y: 10, type: 'mantis', team: 'player' },
+      { x: 1, y: 2, type: 'ant', team: 'enemy' },
+      { x: 2, y: 1, type: 'ant', team: 'enemy' },
+      { x: 3, y: 2, type: 'kabuto', team: 'enemy' },
+      { x: 5, y: 1, type: 'harigane', team: 'enemy' },
+    ],
+    steps: [
+      { on: 'start', text: '敵に ハリガネムシ（🪱）が いる。とても おそいので、ちかづかれる前に たおそう。' },
+      { on: 'enemyTurn', text: 'とりつかれたら、自分の 樹液場や 巣に もどって 休めば なおるよ。' },
+    ],
+  },
+
+  {
+    id: 'w6s1',
+    world: 6,
+    stage: 1,
+    name: 'のっとりの ちから',
+    hint: 'タイワンアリタケは、HPが 半分いかの 敵を 味方に できる。ただし のっとった虫は 毎ターン 弱っていく。',
+    aiLevel: 2,
+    startFunds: 20000,
+    incomePerProperty: 1000,
+    rows: [
+      '.............',
+      '.Q..N...S....',
+      '..S..........',
+      '....FF.......',
+      '...FF...FF...',
+      '..S....F.F.S.',
+      '..F...F..S...',
+      '..FF....FF...',
+      '.....S.......',
+      '...S....N.Q..',
+      '.............',
+      '.............',
+    ],
+    owners: [
+      { x: 1, y: 1, team: 'enemy' },
+      { x: 4, y: 1, team: 'enemy' },
+      { x: 8, y: 9, team: 'player' },
+      { x: 10, y: 9, team: 'player' },
+    ],
+    units: [
+      { x: 8, y: 10, type: 'ant', team: 'player' },
+      { x: 9, y: 10, type: 'ant', team: 'player' },
+      { x: 10, y: 10, type: 'kabuto', team: 'player' },
+      { x: 7, y: 10, type: 'aritake', team: 'player' },
+      { x: 1, y: 2, type: 'ant', team: 'enemy' },
+      { x: 2, y: 1, type: 'ant', team: 'enemy' },
+      { x: 3, y: 2, type: 'kabuto', team: 'enemy' },
+      { x: 5, y: 1, type: 'kuwagata', team: 'enemy' },
+    ],
+    steps: [
+      { on: 'start', text: 'タイワンアリタケ（🍄）は、弱った敵を 味方に できる。まず カブトムシで 敵を けずろう。' },
+      { on: 'takeover', text: 'のっとった！ でも この虫は 毎ターン 弱っていって、かならず たおれる。使いすての 切りふだだよ。' },
     ],
   },
 ];

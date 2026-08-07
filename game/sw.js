@@ -6,7 +6,7 @@
 
 // ⚠ ファイルを 足したり 中身を 変えたら、かならず この数字を 上げること。
 // 上げ忘れると、ホーム画面に ついかずみの 端末で 古い版が 残りつづける。
-const VERSION = 'konchu-senso-v4';
+const VERSION = 'konchu-senso-v5';
 
 const ASSETS = [
   './',

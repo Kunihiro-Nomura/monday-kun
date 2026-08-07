@@ -9,6 +9,12 @@ import { UNITS, baseDamage } from './data/units.js';
 
 export const CAPTURE_POINTS = 20;
 const MAX_HP = 100; // 内部は 100。画面には 10段階で見せる。
+const HP_BAR = 10; // 画面の HP 1目もり ぶん
+
+// のっとられた虫が 毎ターン 弱っていく量。
+// 「敵を うばえる」を 強すぎなくする いちばん大事な 歯どめ。
+// キノコは さいごに 宿主を ころす。だから 永久に とくは しない。
+const ZOMBIE_DECAY = HP_BAR;
 
 let nextUnitId = 1;
 
@@ -71,11 +77,22 @@ export class Game {
       y,
       hp: MAX_HP,
       acted: false, // このターンに 行動ずみか
+      parasite: null, // { type, kind, turnsLeft } とりつかれている じょうたい
+      zombie: false, // のっとられて 相手チームに なっている
+      spored: false, // ゾンビが たおれたとき 胞子を まいたか（孫感染を させない）
     };
   }
 
   spec(unit) {
     return UNITS[unit.type];
+  }
+
+  // 寄生・のっとりの えいきょうを 入れた こうげき力の ばいりつ。
+  // 素の 数値は 書きかえず、参照するときに かける。
+  // こうしておくと 効果が かさなっても もとの数値が こわれない。
+  effectivePower(unit) {
+    const p = unit.parasite && UNITS[unit.parasite.type].parasite;
+    return p && p.power != null ? p.power : 1;
   }
 
   inBounds(x, y) {
@@ -210,7 +227,7 @@ export class Game {
     const airborne = this.spec(defender).moveType === 'air';
     const defStars = airborne ? 0 : this.terrainAt(defender.x, defender.y).def;
 
-    let dmg = base * (attacker.hp / MAX_HP) * (1 - defStars * 0.07);
+    let dmg = base * (attacker.hp / MAX_HP) * this.effectivePower(attacker) * (1 - defStars * 0.07);
     if (luck) dmg *= 0.9 + Math.random() * 0.2;
     return Math.max(1, Math.round(dmg));
   }
@@ -250,9 +267,92 @@ export class Game {
     this.units = this.units.filter((u) => u.hp > 0);
   }
 
+  // ---- 寄生（とりつく・のっとる）----
+  //
+  // 寄生ユニットは こうげき力を 持たない。かわりに となりの敵に とりつく。
+  // とりついた 寄生ユニットは 相手の 体の中に 入るので 盤から きえる。
+  //
+  // 一方的に ならないための 歯どめ:
+  //   ・自分の 陣地で 1ターン 休むと 寄生は なおる
+  //   ・のっとりは HP半分いかの 相手にしか きかない／同時に 1ぴき まで
+  //   ・のっとった虫は 毎ターン 弱り、かならず たおれる（回復も 占領も できない）
+
+  parasiteSpec(unit) {
+    return UNITS[unit.type].parasite || null;
+  }
+
+  zombiesOf(team) {
+    return this.units.filter((u) => u.hp > 0 && u.zombie && u.team === team);
+  }
+
+  // とりつけない 理由を 子ども向けの ことばで かえす。とりつけるなら null。
+  // 「できません」だけでは 何が わるいのか わからないので、かならず 理由を そえる。
+  whyCannotInfest(unit, target) {
+    const p = this.parasiteSpec(unit);
+    if (!p) return 'この虫は とりつけないよ';
+    if (target.team === unit.team) return 'なかまには とりつけないよ';
+    if (target.parasite || target.zombie) return 'もう ほかの 虫に とりつかれているよ';
+
+    // 女王の巣の 中は 手あつく まもられている（一発ぎゃくてんを ふせぐ）
+    if (this.terrainAt(target.x, target.y).hq) {
+      const prop = this.propAt(target.x, target.y);
+      if (prop && prop.team === target.team) return '女王の巣の 中は まもられていて とりつけないよ';
+    }
+
+    if (p.needHalfHp && target.hp > MAX_HP / 2) {
+      return `まだ 元気すぎる。HPを ${hpBars(MAX_HP / 2)} いかに してから のっとろう`;
+    }
+    if (p.kind === 'takeover' && this.zombiesOf(unit.team).length > 0) {
+      return 'のっとれるのは 一どに 1ぴき までだよ';
+    }
+    return null;
+  }
+
+  // ある地点から とりつける 敵ユニット一覧
+  infestTargetsFrom(unit, fromX, fromY) {
+    if (!this.parasiteSpec(unit)) return [];
+    return this.units.filter(
+      (e) =>
+        e.hp > 0 &&
+        e.team !== unit.team &&
+        Math.abs(e.x - fromX) + Math.abs(e.y - fromY) === 1 &&
+        !this.whyCannotInfest(unit, e)
+    );
+  }
+
+  infest(unit, target) {
+    const why = this.whyCannotInfest(unit, target);
+    if (why) return { ok: false, why };
+
+    const p = this.parasiteSpec(unit);
+    const event = { ok: true, kind: p.kind, parasiteType: unit.type, target, tookOver: false };
+
+    if (p.kind === 'takeover') {
+      this.takeOver(target, unit.team);
+      event.tookOver = true;
+    } else {
+      target.parasite = { type: unit.type, kind: p.kind, turnsLeft: p.turns };
+    }
+
+    unit.hp = 0; // 相手の 体の中に 入るので 盤から きえる
+    this.cleanupDead();
+    this.checkVictory();
+    return event;
+  }
+
+  // 敵ユニットを 自軍の ゾンビに する
+  takeOver(target, team) {
+    this.cancelCaptureBy(target);
+    target.team = team;
+    target.zombie = true;
+    target.parasite = null;
+    target.acted = true; // のっとった ターンは まだ 動けない
+  }
+
   // ---- 占領 ----
 
   canCapture(unit) {
+    if (unit.zombie) return false; // あやつられている虫は 巣を とれない
     if (!this.spec(unit).canCapture) return false;
     const prop = this.propAt(unit.x, unit.y);
     return !!prop && prop.team !== unit.team;
@@ -305,6 +405,8 @@ export class Game {
     if (!spec) return null;
     const unitKind = spec.moveType === 'air' ? 'air' : 'ground';
     if (unitKind !== kind) return null;
+    // その世界で まだ 出てこない虫は つくれない（PLAN.md §4 の 解禁表）
+    if ((spec.fromWorld || 1) > (this.mapData.world || 99)) return null;
     if (this.funds[team] < spec.cost) return null;
 
     this.funds[team] -= spec.cost;
@@ -319,21 +421,144 @@ export class Game {
   endTurn() {
     this.turnTeam = this.turnTeam === 'player' ? 'enemy' : 'player';
     if (this.turnTeam === 'player') this.turnCount++;
-    this.startTurn(this.turnTeam);
+    return this.startTurn(this.turnTeam);
   }
 
+  // ターンの はじめの 処理。起きたことを イベントの配列で かえすので、
+  // 画面側は それを 順番に 見せるだけで よい（engine は 見せ方を 知らない）。
   startTurn(team) {
     // 収入
     this.funds[team] += this.propsOf(team).length * this.income;
+    for (const unit of this.unitsOf(team)) unit.acted = false;
+
+    const events = this.resolveParasites(team);
 
     // 自分の 樹液場・巣・花畑に いる虫は かいふく（樹液を すって 元気になる）
     for (const unit of this.unitsOf(team)) {
-      unit.acted = false;
+      if (unit.zombie) continue; // あやつられた虫は もう 元には もどらない
       const prop = this.propAt(unit.x, unit.y);
       if (prop && prop.team === team && unit.hp < MAX_HP) {
         unit.hp = Math.min(MAX_HP, unit.hp + 20);
       }
     }
+
+    this.cleanupDead();
+    this.checkVictory();
+    return events;
+  }
+
+  // 寄生の えいきょうを 解決する。
+  // かならず「なおる道」を さきに 見るので、自陣に にげれば 助かる。
+  resolveParasites(team) {
+    const events = [];
+
+    for (const unit of this.unitsOf(team)) {
+      // 1. のっとられた虫は 毎ターン 弱っていき、かならず たおれる
+      if (unit.zombie) {
+        unit.hp -= ZOMBIE_DECAY;
+        if (unit.hp <= 0) {
+          unit.hp = 0;
+          this.cancelCaptureBy(unit);
+          events.push({ kind: 'zombieFell', unit });
+          if (!unit.spored) events.push(...this.spreadSpores(unit));
+        } else {
+          events.push({ kind: 'zombieWeaken', unit });
+        }
+        continue;
+      }
+
+      if (!unit.parasite) continue;
+      const p = UNITS[unit.parasite.type].parasite;
+
+      // 2. 自分の 陣地で 休むと なおる
+      const prop = this.propAt(unit.x, unit.y);
+      if (prop && prop.team === team) {
+        events.push({ kind: 'cure', unit, parasiteType: unit.parasite.type });
+        unit.parasite = null;
+        continue;
+      }
+
+      // 3. 毎ターンの ダメージ
+      if (p.hpPerTurn) {
+        unit.hp -= p.hpPerTurn;
+        events.push({ kind: 'drain', unit, parasiteType: unit.parasite.type, amount: p.hpPerTurn });
+      }
+
+      // 4. 期げんが 来たら 効果を しめる
+      let sank = false;
+      if (unit.parasite.turnsLeft != null && unit.hp > 0) {
+        unit.parasite.turnsLeft -= 1;
+        if (unit.parasite.turnsLeft <= 0) {
+          const parasiteType = unit.parasite.type;
+          unit.parasite = null;
+          if (p.end === 'drown') {
+            const to = this.nearestWater(unit);
+            if (to) {
+              // 自然界の きびしさは ごまかさない。
+              // ハリガネムシに あやつられた虫は 水へ 歩き出し、しずむ。
+              unit.x = to.x;
+              unit.y = to.y;
+              unit.hp = 0;
+              sank = true;
+              this.cancelCaptureBy(unit);
+              events.push({ kind: 'drown', unit, parasiteType, to });
+            } else {
+              events.push({ kind: 'detach', unit, parasiteType });
+            }
+          } else {
+            events.push({ kind: 'detach', unit, parasiteType });
+          }
+        }
+      }
+
+      // 入水は それ自体が 見せ場なので、かさねて「たおれた」は 出さない
+      if (unit.hp <= 0 && !sank) {
+        unit.hp = 0;
+        this.cancelCaptureBy(unit);
+        events.push({ kind: 'fell', unit });
+      }
+    }
+
+    this.cleanupDead();
+    return events;
+  }
+
+  // ゾンビが たおれると となりの 虫 1ぴきに 胞子が とぶ。
+  // ひろがるのは 1回だけ。孫感染は させない（無限に つながると ゲームが こわれる）。
+  spreadSpores(dying) {
+    const events = [];
+    for (const [nx, ny] of neighbors(dying.x, dying.y)) {
+      if (!this.inBounds(nx, ny)) continue;
+      const next = this.unitAt(nx, ny);
+      if (!next || next === dying || next.team === dying.team) continue;
+      if (next.parasite || next.zombie) continue;
+      if (next.hp > MAX_HP / 2) continue; // 弱った虫にしか つかない
+      if (this.terrainAt(nx, ny).hq && (this.propAt(nx, ny) || {}).team === next.team) continue;
+
+      this.takeOver(next, dying.team);
+      next.spored = true; // この虫は もう 胞子を まかない
+      events.push({ kind: 'spread', unit: next, from: dying });
+      break; // とぶのは 1ぴきだけ
+    }
+    dying.spored = true;
+    return events;
+  }
+
+  // いちばん近い 水のマス（ハリガネムシの 入水さき）
+  nearestWater(unit) {
+    let best = null;
+    let bestD = Infinity;
+    for (let y = 0; y < this.height; y++) {
+      for (let x = 0; x < this.width; x++) {
+        if (!TERRAIN[this.grid[y][x]].sinks) continue;
+        const d = Math.abs(x - unit.x) + Math.abs(y - unit.y);
+        if (d < bestD) {
+          bestD = d;
+          best = { x, y };
+        }
+      }
+    }
+    return best;
   }
 
   hasActionsLeft(team) {

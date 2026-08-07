@@ -275,13 +275,65 @@ const enemyMoved = s.units.filter((u) => u.team === 'enemy');
 check('敵ユニットが 生きている / 動いている', enemyMoved.length > 0, `${enemyMoved.length}体`);
 await shot(page, '08-after-ai');
 
+console.log('\n== 寄生・のっとり ==');
+// PLAN.md §3.3 の 目玉。画面から ほんとうに 使えるかを たしかめる。
+{
+  await page.evaluate(() => window.__e2e.startStage('w6s1'));
+  await page.waitForTimeout(500);
+
+  // 敵カブトムシを 弱らせて、アリタケの となりに よせる
+  const pos = await page.evaluate(() => {
+    const g = window.__e2e.game;
+    const worm = g.unitsOf('player').find((u) => u.type === 'aritake');
+    const prey = g.unitsOf('enemy').find((u) => u.type === 'kabuto');
+    prey.hp = 40;
+    prey.x = worm.x;
+    prey.y = worm.y - 1;
+    window.__e2e.renderer.draw();
+    return { wx: worm.x, wy: worm.y, px: prey.x, py: prey.y };
+  });
+
+  await tapTile(pos.wx, pos.wy); // えらぶ
+  await tapTile(pos.wx, pos.wy); // その場で とまる → 行動メニュー
+  const labels = await page.locator('#actions .btn').allTextContents();
+  check('寄生ユニットに「のっとる」が 出る', labels.some((t) => t.startsWith('のっとる')), labels.join('／'));
+  check('寄生ユニットに「こうげき」は 出ない', !labels.includes('こうげき'));
+  await shot(page, '10-infest-menu');
+
+  await page.locator('#actions .btn', { hasText: 'のっとる' }).first().click();
+  await page.waitForTimeout(200);
+  await tapTile(pos.px, pos.py);
+  await page.waitForTimeout(500);
+
+  const z = await page.evaluate(() => {
+    const g = window.__e2e.game;
+    const zombie = g.units.find((u) => u.zombie);
+    return zombie ? { type: zombie.type, team: zombie.team, hp: zombie.hp } : null;
+  });
+  check('敵が 味方に なる', z && z.team === 'player' && z.type === 'kabuto', JSON.stringify(z));
+  const wormGone = await page.evaluate(() => !window.__e2e.game.units.some((u) => u.type === 'aritake'));
+  check('とりついた 寄生ユニットは 盤から きえる', wormGone);
+  await shot(page, '11-takeover');
+
+  // 弱っていくことを たしかめる（毎ターン へる）
+  const hpBefore = z.hp;
+  await page.evaluate(() => window.__e2e.game.startTurn('player'));
+  const hpAfter = await page.evaluate(() => (window.__e2e.game.units.find((u) => u.zombie) || {}).hp ?? 0);
+  check('のっとった虫は 毎ターン 弱る', hpAfter < hpBefore, `${hpBefore} → ${hpAfter}`);
+}
+
 console.log('\n== 昆虫ずかん ==');
 
 await page.evaluate(() => window.__e2e.show('zukan'));
 await page.waitForTimeout(300);
 const known = await page.locator('.zukan-card:not(.unknown)').count();
 const total = await page.locator('.zukan-card').count();
-check('ずかんが ひらく', total === 8, `${total}まい`);
+// 虫を 足すたびに 数字を 書きかえるのは 忘れやすい。データから 数える。
+const unitCount = await page.evaluate(async () => {
+  const { UNITS } = await import('../js/data/units.js');
+  return Object.keys(UNITS).length;
+});
+check('ずかんが ひらく', total === unitCount, `${total}まい／虫は ${unitCount}しゅるい`);
 check('たたかいに 出た虫が 図かんに のる', known >= 2, `${known}しゅるい`);
 await shot(page, '09-zukan');
 

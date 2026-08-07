@@ -3,6 +3,7 @@
 // 80面ぶんの データを 足していくとき、マップの 書きまちがいも ここで 見つかる。
 
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { Game, hpBars, CAPTURE_POINTS } from '../js/engine.js';
 import { AI } from '../js/ai.js';
 import { MAPS, getMap } from '../js/data/maps.js';
@@ -60,12 +61,18 @@ test('すべてのマップで 初期ユニットが かさなっていない', 
   }
 });
 
-test('攻撃力表が すべてのユニットの くみあわせを もっている', () => {
+test('こうげき力が すべてのユニットの くみあわせで きまる', () => {
+  // 表に 直接 書くのは たたかう虫どうしだけ。
+  // 寄生ユニットは「こうげき力ゼロ」「だれからでも たおされる」を
+  // FRAGILITY で まとめて きめている（units.js 参照）。
+  // 大事なのは 表の かたちでは なく、どの くみあわせでも 数が 出ること。
   const ids = Object.keys(UNITS);
   for (const a of ids) {
-    assert.ok(DAMAGE[a], `${a} の こうげき行が ない`);
+    if (!UNITS[a].parasite) assert.ok(DAMAGE[a], `${a} の こうげき行が ない`);
     for (const d of ids) {
-      assert.equal(typeof DAMAGE[a][d], 'number', `${a} → ${d} の 数値が ない`);
+      const v = baseDamage(a, d);
+      assert.equal(typeof v, 'number', `${a} → ${d} の 数値が ない`);
+      assert.ok(v >= 0 && v <= 120, `${a} → ${d} の 数値 ${v} が はんいの そと`);
     }
   }
 });
@@ -100,6 +107,19 @@ test('すべての虫に 本物の 体長（bodyMm）が ついている', () =>
   for (const [id, u] of Object.entries(UNITS)) {
     assert.equal(typeof u.bodyMm, 'number', `${u.name} に bodyMm が ない`);
     assert.ok(u.bodyMm > 0 && u.bodyMm <= 200, `${id}: bodyMm ${u.bodyMm} は ありえない`);
+  }
+});
+
+test('ゲームに 出る虫は すべて 絵の 発注が ある', () => {
+  // 虫を 足したのに 発注を 足し忘れると、その虫だけ ずっと 絵文字のまま になる。
+  // グラフィック担当（AGENTS.md）に つたわる のは orders.json だけなので、ここで しばる。
+  const orders = JSON.parse(readFileSync(new URL('../art/orders.json', import.meta.url), 'utf8'));
+  const inGame = new Map(orders.orders.filter((o) => o.inGame).map((o) => [o.id, o]));
+  for (const id of Object.keys(UNITS)) {
+    assert.ok(inGame.has(id), `${UNITS[id].name}(${id}) の 発注が orders.json に ない`);
+  }
+  for (const id of inGame.keys()) {
+    assert.ok(UNITS[id], `orders.json の "${id}" は ゲームに ない虫（IDの まちがい？）`);
   }
 });
 
@@ -183,6 +203,233 @@ test('1面は プレイヤーが ほぼ 負けない', () => {
     if (g.status === 'lose') lost++;
   }
   assert.equal(lost, 0, `20回中 ${lost}回 負けた`);
+});
+
+console.log('\n== 寄生 ==');
+// PLAN.md §3.3.4 の「安全そうち」を そのまま テストに する。
+// 寄生は 設計を まちがえると ゲームを こわす。歯どめが 消えていないかを 毎回 見る。
+
+// 寄生を ためすための 小さな盤（水べ つき）
+function parasiteField(parasiteType, targetType = 'kabuto', targetHp = 100) {
+  const g = new Game({
+    id: 'test',
+    world: 6,
+    rows: ['SQ....', '......', '..WW..', '......', '......', '....QS'],
+    owners: [
+      { x: 1, y: 0, team: 'enemy' },
+      { x: 0, y: 0, team: 'enemy' },
+      { x: 4, y: 5, team: 'player' },
+      { x: 5, y: 5, team: 'player' },
+    ],
+    units: [
+      { x: 2, y: 4, type: parasiteType, team: 'player' },
+      { x: 3, y: 4, type: targetType, team: 'enemy' },
+    ],
+  });
+  const worm = g.unitsOf('player')[0];
+  const prey = g.unitsOf('enemy')[0];
+  prey.hp = targetHp;
+  return { g, worm, prey };
+}
+
+test('寄生ユニットは こうげき力を もたない', () => {
+  for (const [id, u] of Object.entries(UNITS)) {
+    if (!u.parasite) continue;
+    for (const other of Object.keys(UNITS)) {
+      assert.equal(baseDamage(id, other), 0, `${u.name} が ${other} に こうげき できてしまう`);
+    }
+  }
+});
+
+test('寄生ユニットは だれからでも たおされる（もろい）', () => {
+  for (const [id, u] of Object.entries(UNITS)) {
+    if (!u.parasite) continue;
+    for (const [atk, a] of Object.entries(UNITS)) {
+      if (a.parasite) continue;
+      assert.ok(baseDamage(atk, id) > 0, `${a.name} が ${u.name} を こうげき できない`);
+    }
+  }
+});
+
+test('となりの敵に とりつける', () => {
+  const { g, worm, prey } = parasiteField('komayubachi');
+  assert.equal(g.infestTargetsFrom(worm, worm.x, worm.y).length, 1);
+  const ev = g.infest(worm, prey);
+  assert.ok(ev.ok);
+  assert.ok(prey.parasite, 'とりつけていない');
+  assert.equal(g.units.includes(worm), false, '寄生ユニットが 盤に のこっている');
+});
+
+test('とりつかれた虫は 毎ターン 弱る', () => {
+  const { g, worm, prey } = parasiteField('komayubachi');
+  g.infest(worm, prey);
+  const before = prey.hp;
+  g.startTurn('enemy');
+  assert.ok(prey.hp < before, 'HPが へっていない');
+});
+
+test('自分の じんちで 休むと 寄生は なおる', () => {
+  // 一方的に ならないための いちばん大事な 歯どめ
+  const { g, worm, prey } = parasiteField('komayubachi');
+  g.infest(worm, prey);
+  prey.x = 1;
+  prey.y = 0; // 敵の 女王の巣（自分の じんち）
+  const events = g.startTurn('enemy');
+  assert.equal(prey.parasite, null, 'なおっていない');
+  assert.ok(events.some((e) => e.kind === 'cure'));
+});
+
+test('1ぴきに 寄生は ひとつまで', () => {
+  const { g, worm, prey } = parasiteField('komayubachi');
+  g.infest(worm, prey);
+  const second = g.makeUnit('yadoribae', 'player', 3, 5);
+  g.units.push(second);
+  assert.ok(g.whyCannotInfest(second, prey), '二重に とりつけてしまう');
+});
+
+test('ヤドリバエに とりつかれると こうげき力が 半分に なる', () => {
+  const { g, worm, prey } = parasiteField('yadoribae');
+  const victim = g.makeUnit('kabuto', 'player', 0, 5);
+  const before = g.calcDamage(prey, victim, false);
+  g.infest(worm, prey);
+  const after = g.calcDamage(prey, victim, false);
+  assert.ok(after < before * 0.6, `${before} → ${after} と 弱っていない`);
+});
+
+test('ハリガネムシに あやつられた虫は 水に しずむ', () => {
+  // 自然界の きびしさは ごまかさない。ただし 2ターンの ゆうよが ある。
+  const { g, worm, prey } = parasiteField('harigane');
+  g.infest(worm, prey);
+  let drowned = null;
+  for (let i = 0; i < 4 && !drowned; i++) {
+    drowned = g.startTurn('enemy').find((e) => e.kind === 'drown');
+  }
+  assert.ok(drowned, '水に しずまなかった');
+  assert.ok(g.terrainAt(drowned.to.x, drowned.to.y).sinks, '水では ない場所に しずんだ');
+  assert.equal(g.units.includes(prey), false, '盤に のこっている');
+});
+
+test('ハリガネムシが 出るマップには かならず 水べが ある', () => {
+  // 水が ないと いちばんの 見せ場が 出ない。データの まちがいを ここで 見つける。
+  for (const map of MAPS) {
+    const hasWorm = (map.units || []).some((u) => UNITS[u.type].parasite?.end === 'drown');
+    if (!hasWorm) continue;
+    const g = new Game(map);
+    const water = [...map.rows.join('')].some((ch) => TERRAIN[CHAR_TO_TERRAIN[ch]].sinks);
+    assert.ok(water, `${map.id}: ハリガネムシが いるのに 水べが ない`);
+    assert.ok(g.nearestWater(g.units[0]), `${map.id}: 水べを 見つけられない`);
+  }
+});
+
+test('のっとりは 元気な相手には きかない', () => {
+  const { g, worm, prey } = parasiteField('aritake', 'kabuto', 100);
+  assert.ok(g.whyCannotInfest(worm, prey), '元気な相手を のっとれてしまう');
+  prey.hp = 50;
+  assert.equal(g.whyCannotInfest(worm, prey), null, '弱った相手を のっとれない');
+});
+
+test('のっとると 敵が 味方に なる', () => {
+  const { g, worm, prey } = parasiteField('aritake', 'kabuto', 40);
+  const ev = g.infest(worm, prey);
+  assert.ok(ev.tookOver);
+  assert.equal(prey.team, 'player');
+  assert.ok(prey.zombie);
+});
+
+test('のっとった虫は かならず たおれる（永久には とくしない）', () => {
+  const { g, worm, prey } = parasiteField('aritake', 'kabuto', 50);
+  g.infest(worm, prey);
+  let turns = 0;
+  while (g.units.includes(prey) && turns < 30) {
+    g.startTurn('player');
+    turns++;
+  }
+  assert.equal(g.units.includes(prey), false, `${turns} ターン たっても たおれない`);
+});
+
+test('のっとった虫は 回復も 占領も できない', () => {
+  const { g, worm, prey } = parasiteField('aritake', 'kabuto', 40);
+  g.infest(worm, prey);
+  prey.x = 5;
+  prey.y = 5; // 自分の 樹液場の 上
+  const before = prey.hp;
+  g.startTurn('player');
+  assert.ok(prey.hp < before, 'ゾンビが 回復して しまった');
+  assert.equal(g.canCapture(prey), false, 'ゾンビが 占領できて しまう');
+});
+
+test('のっとれるのは 一どに 1ぴき まで', () => {
+  const { g, worm, prey } = parasiteField('aritake', 'kabuto', 40);
+  g.infest(worm, prey);
+  const second = g.makeUnit('aritake', 'player', 1, 5);
+  const other = g.makeUnit('mantis', 'enemy', 2, 5);
+  other.hp = 30;
+  g.units.push(second, other);
+  assert.ok(g.whyCannotInfest(second, other), '2ひき目を のっとれてしまう');
+});
+
+test('女王の巣の 中の虫には とりつけない', () => {
+  const { g, worm, prey } = parasiteField('aritake', 'kabuto', 30);
+  prey.x = 1;
+  prey.y = 0; // 敵の 女王の巣
+  worm.x = 1;
+  worm.y = 1;
+  assert.ok(g.whyCannotInfest(worm, prey), '女王の巣の 中で のっとれてしまう');
+});
+
+test('胞子は 1回しか ひろがらない（孫感染しない）', () => {
+  // ここが 抜けると 感染が 無限に つながって ゲームが こわれる
+  const { g, worm, prey } = parasiteField('aritake', 'kabuto', 20);
+  g.infest(worm, prey);
+  const next = g.makeUnit('ant', 'enemy', prey.x + 1, prey.y);
+  next.hp = 30;
+  g.units.push(next);
+
+  let spread = null;
+  for (let i = 0; i < 5 && !spread; i++) {
+    spread = g.startTurn('player').find((e) => e.kind === 'spread');
+  }
+  assert.ok(spread, '胞子が とばなかった');
+  assert.ok(next.zombie && next.team === 'player');
+  assert.ok(next.spored, '孫感染の 歯どめが 立っていない');
+
+  // 2代目が たおれても もう ひろがらない
+  const third = g.makeUnit('ant', 'enemy', next.x + 1, next.y);
+  third.hp = 20;
+  g.units.push(third);
+  for (let i = 0; i < 15; i++) g.startTurn('player');
+  assert.equal(third.zombie, false, '孫感染して しまった');
+});
+
+test('寄生ユニットは その世界に なるまで つくれない', () => {
+  const g = new Game(getMap('w1s3')); // 世界1
+  const nest = g.propsOf('player').find((p) => g.terrainAt(p.x, p.y).produce === 'ground');
+  g.funds.player = 99999;
+  assert.equal(g.produce(nest.x, nest.y, 'komayubachi', 'player'), null, '世界1で 寄生ユニットが つくれた');
+  assert.ok(g.produce(nest.x, nest.y, 'ant', 'player'), 'ふつうの虫が つくれない');
+});
+
+test('寄生ユニットが 出る面では AI どうしでも 決着する', () => {
+  // 寄生が こわれていると、たがいに 手づまりになって 終わらなくなる
+  for (const id of ['w4s1', 'w5s1', 'w6s1']) {
+    let finished = 0;
+    for (let i = 0; i < 5; i++) {
+      const g = new Game(getMap(id));
+      const red = new AI(g, 2);
+      const blue = new AI(g, 2);
+      blue.team = 'player';
+      for (let t = 0; t < 60 && g.status === 'playing'; t++) {
+        const actor = g.turnTeam === 'enemy' ? red : blue;
+        let guard = 0;
+        while (actor.takeOneAction() && guard++ < 200);
+        actor.produce();
+        if (g.status !== 'playing') break;
+        g.endTurn();
+      }
+      if (g.status !== 'playing') finished++;
+    }
+    assert.ok(finished >= 3, `${id}: 5回中 ${finished}回しか 決着しない`);
+  }
 });
 
 console.log('\n== 移動 ==');

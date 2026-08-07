@@ -8,8 +8,8 @@ import { Game, hpBars, distance } from './engine.js';
 import { AI } from './ai.js';
 import { Renderer, TEAM_COLOR, TEAM_LABEL, loadSprites } from './render.js';
 import { BattleScene, getBattleMode, setBattleMode, hasSeenFight } from './battle.js';
-import { MAPS, getMap } from './data/maps.js';
-import { UNITS, baseDamage } from './data/units.js';
+import { MAPS, WORLDS, getMap } from './data/maps.js';
+import { UNITS, baseDamage, producibleAt } from './data/units.js';
 import { TERRAIN } from './data/terrain.js';
 
 const SAVE_KEY = 'konchu-senso/progress/v1';
@@ -113,6 +113,25 @@ function renderStageList() {
     const unlocked = isUnlocked(i);
     const cleared = progress.cleared[map.id];
 
+    // 世界が かわるところに 見出しを 出す。
+    // どの面も「1」から はじまるので、見出しが ないと 同じ番号が ならんで 見える。
+    const prev = MAPS[i - 1];
+    if (!prev || prev.world !== map.world) {
+      const head = document.createElement('div');
+      head.className = 'stage-world';
+      head.textContent = `せかい${map.world}「${WORLDS[map.world] || ''}」`;
+      list.appendChild(head);
+
+      // 世界の 番号が とぶところに ひとこと おく。
+      // だまって「せかい1」の つぎが「せかい4」だと、こわれたように 見えてしまう。
+      if (prev && map.world > prev.world + 1) {
+        const note = document.createElement('div');
+        note.className = 'stage-note';
+        note.textContent = `せかい${prev.world + 1}〜${map.world - 1}は これから つくるよ。さきに せかい${map.world}で あそべます。`;
+        list.appendChild(note);
+      }
+    }
+
     const card = document.createElement('div');
     card.className = `stage-card${unlocked ? '' : ' locked'}${cleared ? ' cleared' : ''}`;
     card.innerHTML = `
@@ -185,7 +204,7 @@ function refresh() {
     renderer.overlay.selected = { x: ui.unit.x, y: ui.unit.y };
   } else if (ui.mode === 'action' && ui.unit) {
     renderer.overlay.selected = { x: ui.unit.x, y: ui.unit.y };
-  } else if (ui.mode === 'target' && ui.unit) {
+  } else if ((ui.mode === 'target' || ui.mode === 'infest') && ui.unit) {
     renderer.overlay.attack = ui.targets.map((t) => ({ x: t.x, y: t.y }));
     renderer.overlay.selected = { x: ui.unit.x, y: ui.unit.y };
   }
@@ -201,6 +220,45 @@ function updateHud() {
   document.getElementById('hud-count').textContent = `ターン ${game.turnCount}`;
   document.getElementById('hud-funds').textContent = `💰 ${game.funds.player.toLocaleString()}`;
   document.getElementById('btn-endturn').disabled = game.turnTeam !== 'player' || game.status !== 'playing';
+}
+
+// ターンの はじめに 起きた 寄生の できごとを、順番に 見せる。
+// engine は「何が 起きたか」だけを かえす。ことばに するのは ここの しごと。
+async function showTurnEvents(events) {
+  for (const ev of events) {
+    const name = UNITS[ev.unit.type].name;
+    const by = ev.parasiteType ? UNITS[ev.parasiteType].name : '';
+
+    if (ev.kind === 'drown') {
+      // 自然界の きびしさは ごまかさない。ここは いちばん 長く 見せる。
+      renderer.centerOn(ev.unit.x, ev.unit.y);
+      renderer.draw();
+      setBanner(`${name} は ${by} に あやつられ、水へ 歩き出した…`, 3200);
+      await sleep(2200);
+      setBanner(`${name} は 池に しずんでいった。${by} は 水の中へ かえっていく`, 3600);
+      await sleep(2600);
+    } else if (ev.kind === 'spread') {
+      renderer.centerOn(ev.unit.x, ev.unit.y);
+      setBanner(`キノコから 胞子が とんだ！ ${name} も あやつられた`, 3000);
+      await sleep(1800);
+    } else if (ev.kind === 'zombieFell') {
+      setBanner(`あやつられていた ${name} は 力つきた`, 2400);
+      await sleep(1400);
+    } else if (ev.kind === 'cure') {
+      setBanner(`${name} は 自分の じんちで 休んで、${by} が とれた！`, 2600);
+      await sleep(1400);
+    } else if (ev.kind === 'drain') {
+      setBanner(`${name} は ${by} に 体を 食べられて 弱っている`, 2200);
+      await sleep(900);
+    } else if (ev.kind === 'detach') {
+      setBanner(`${by} は そだちきって ${name} から はなれていった`, 2600);
+      await sleep(1200);
+    } else if (ev.kind === 'fell') {
+      setBanner(`${name} は 力つきて にげていった`, 2200);
+      await sleep(1000);
+    }
+    renderer.draw();
+  }
 }
 
 // ---- 手びき（チュートリアル） ----
@@ -304,6 +362,7 @@ function handleTap(x, y) {
   if (ui.mode === 'idle') return tapIdle(x, y);
   if (ui.mode === 'moving') return tapMoving(x, y);
   if (ui.mode === 'target') return tapTarget(x, y);
+  if (ui.mode === 'infest') return tapInfest(x, y);
   // action 中は ボタンで えらんでもらう
   setTileInfo(describeTile(x, y));
   refresh();
@@ -404,6 +463,40 @@ async function tapTarget(x, y) {
   finishAction();
 }
 
+// 寄生ユニットが となりの敵に とりつく。
+// 勝ち負けを 計算するのは engine。ここは 結果を ことばに するだけ。
+function tapInfest(x, y) {
+  const target = ui.targets.find((t) => t.x === x && t.y === y);
+  if (!target) {
+    ui.mode = 'action';
+    showActionMenu();
+    refresh();
+    return;
+  }
+
+  const unit = ui.unit;
+  const spec = UNITS[unit.type];
+  const targetName = UNITS[target.type].name;
+  const event = game.infest(unit, target);
+
+  if (!event.ok) {
+    setBanner(event.why, 2600);
+    ui.mode = 'action';
+    showActionMenu();
+    refresh();
+    return;
+  }
+
+  if (event.tookOver) {
+    setBanner(`${targetName} を のっとった！ でも 毎ターン 弱っていくよ`, 3000);
+    fireTutorial('takeover');
+  } else {
+    setBanner(`${spec.name} が ${targetName} に とりついた。${spec.parasite.short}`, 3000);
+    fireTutorial('infest');
+  }
+  finishAction();
+}
+
 function cancelSelection() {
   if (ui.unit && ui.origin) {
     ui.unit.x = ui.origin.x;
@@ -436,6 +529,28 @@ function showActionMenu() {
       setTileInfo('こうげき する あいてを タップしよう');
       refresh();
     });
+  }
+
+  // 寄生ユニットの「とりつく」。こうげき とは べつの 勝ちすじ。
+  const parasite = game.parasiteSpec(unit);
+  if (parasite) {
+    const prey = game.infestTargetsFrom(unit, unit.x, unit.y);
+    if (prey.length) {
+      addAction(parasite.label, () => {
+        ui.targets = prey;
+        ui.mode = 'infest';
+        hideActionMenu();
+        setTileInfo(`${parasite.label} あいてを タップしよう`);
+        refresh();
+      });
+    } else {
+      // なぜ できないのかを 見せる。だまって ボタンが 消えるのが いちばん わかりにくい。
+      const near = game.units.filter(
+        (e) => e.hp > 0 && e.team !== unit.team && Math.abs(e.x - unit.x) + Math.abs(e.y - unit.y) === 1
+      );
+      const why = near.length ? game.whyCannotInfest(unit, near[0]) : 'となりに 敵が いないよ';
+      addAction(`${parasite.label}（できない）`, () => setBanner(why, 2600), 'ghost');
+    }
   }
 
   if (game.canCapture(unit)) {
@@ -480,18 +595,22 @@ function openProduceMenu(x, y) {
   const kind = game.canProduceAt(x, y, 'player');
   if (!kind) return;
 
-  const list = Object.values(UNITS).filter((u) => (u.moveType === 'air' ? 'air' : 'ground') === kind);
+  const list = producibleAt(kind, currentMap.world);
   const placeName = game.terrainAt(x, y).name;
 
   let html = `<h2>${placeName}で 虫を つくる</h2><p>もっているお金: 💰 ${game.funds.player.toLocaleString()}</p>`;
   html += list
     .map((u) => {
       const can = u.cost <= game.funds.player;
+      // 寄生ユニットは こうげき できない。買ってから 気づくと つらいので さきに 書く。
+      const meta = u.parasite
+        ? `${u.role}／うごき ${u.move}／こうげき できない`
+        : `${u.role}／うごき ${u.move}${u.canCapture ? '／せんりょう できる' : ''}`;
       return `<button class="produce-item" data-type="${u.id}" ${can ? '' : 'disabled'}>
         <span class="produce-icon">${u.icon}</span>
         <span>
           <span class="produce-name">${u.name}</span>
-          <span class="produce-meta">${u.role}／うごき ${u.move}${u.canCapture ? '／せんりょう できる' : ''}</span>
+          <span class="produce-meta">${meta}</span>
         </span>
         <span class="produce-cost">${u.cost.toLocaleString()}</span>
       </button>`;
@@ -515,10 +634,14 @@ function openProduceMenu(x, y) {
 }
 
 // ---- ターン ----
-document.getElementById('btn-endturn').addEventListener('click', () => {
+document.getElementById('btn-endturn').addEventListener('click', async () => {
   if (game.turnTeam !== 'player' || game.status !== 'playing') return;
   cancelSelection();
-  game.endTurn();
+  ui.mode = 'ai'; // 演出中は 操作を うけつけない
+  const events = game.endTurn();
+  renderer.draw();
+  await showTurnEvents(events);
+  if (checkGameOver()) return;
   runAITurn();
 });
 
@@ -584,6 +707,18 @@ async function runAITurn() {
       });
       renderer.draw();
       await sleep(120);
+    } else if (report.type === 'infest' && report.result && report.result.ok) {
+      discover([report.target.type]);
+      const by = UNITS[report.unit.type].name;
+      const to = UNITS[report.target.type].name;
+      renderer.draw();
+      setBanner(
+        report.result.tookOver
+          ? `${by} が ${to} を のっとった！ ${to} は あかチームに なってしまった`
+          : `${by} が ${to} に とりついた。${UNITS[report.unit.type].parasite.short}`,
+        3000
+      );
+      await sleep(2000);
     } else {
       await sleep(320);
     }
@@ -600,7 +735,11 @@ async function runAITurn() {
 
   if (checkGameOver()) return;
 
-  game.endTurn();
+  const events = game.endTurn();
+  renderer.draw();
+  await showTurnEvents(events);
+  if (checkGameOver()) return;
+
   ui = { mode: 'idle', unit: null, origin: null, moved: false, targets: [] };
   setBanner('あおチームの ターン', 1400);
   fireTutorial('playerTurn');
@@ -679,8 +818,10 @@ function renderZukan() {
       if (!zukan.has(u.id)) {
         return `<div class="zukan-card unknown">？？？<br><span style="font-size:12px">たたかいに 出てくると 図かんに のるよ</span></div>`;
       }
+      // 寄生ユニットは だれにでも 弱いので、「とくいな あいて」に 出すと
+      // 全部の虫に ならんで じゃまになる。ここでは かぞえない。
       const dmgRow = Object.entries(UNITS)
-        .filter(([id]) => baseDamage(u.id, id) >= 70)
+        .filter(([id, s]) => !s.parasite && baseDamage(u.id, id) >= 70)
         .map(([, s]) => s.name);
 
       return `<div class="zukan-card">
@@ -696,6 +837,7 @@ function renderZukan() {
           <span class="zukan-stat">しゃてい <b>${u.minRange === u.maxRange ? u.maxRange : `${u.minRange}〜${u.maxRange}`}</b></span>
           <span class="zukan-stat">おかね <b>${u.cost.toLocaleString()}</b></span>
           ${u.canCapture ? '<span class="zukan-stat">せんりょう <b>できる</b></span>' : ''}
+          ${u.parasite ? `<span class="zukan-stat">とりつく <b>${u.parasite.short}</b></span>` : ''}
         </div>
         <dl class="zukan-facts">
           <dt>おおきさ</dt><dd>${u.bio.size}</dd>

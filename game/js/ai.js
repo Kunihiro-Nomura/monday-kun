@@ -6,7 +6,7 @@
 // Lv2 以降は これを 土台に「相性のよい相手をねらう」「間接こうげきの間合い管理」を足していく。
 
 import { key, neighbors, distance } from './engine.js';
-import { UNITS, baseDamage } from './data/units.js';
+import { UNITS, baseDamage, producibleAt } from './data/units.js';
 
 export class AI {
   constructor(game, level = 1) {
@@ -32,6 +32,19 @@ export class AI {
     const g = this.game;
     const spec = g.spec(unit);
     const tiles = g.movableTiles(unit);
+
+    // 0. 寄生ユニットは こうげき できない。とりつくことだけを 考える
+    if (g.parasiteSpec(unit)) return this.planParasite(unit, tiles);
+
+    // いのちに かかわる 寄生（入水・体力ぎれ）を 受けたら、自陣に さがって なおす。
+    // なおる道が あることを AI にも 使わせないと、寄生が 一方的な 技に なってしまう。
+    if (this.level >= 2 && unit.parasite && this.isDeadly(unit)) {
+      const home = this.nearestHome(unit);
+      if (home) {
+        const tile = this.stepToward(unit, tiles, home);
+        if (tile) return { type: 'move', tile };
+      }
+    }
 
     // 1. こうげき できるなら いちばん とくな こうげきを する
     let best = null;
@@ -95,6 +108,65 @@ export class AI {
     // 守りの かたい地形に 立って こうげき したい
     score += g.terrainAt(tile.x, tile.y).def * 50;
     return score;
+  }
+
+  // その寄生を ほうっておくと この虫は たおれるか？
+  isDeadly(unit) {
+    const p = unit.parasite && UNITS[unit.parasite.type].parasite;
+    if (!p) return false;
+    if (p.end === 'drown') return true;
+    if (p.hpPerTurn && unit.parasite.turnsLeft != null) {
+      return unit.hp <= p.hpPerTurn * unit.parasite.turnsLeft;
+    }
+    return false;
+  }
+
+  // 寄生ユニットの 行動。となりに とりつける敵が いれば とりつき、
+  // いなければ いちばん おいしい えものへ 近づく。
+  planParasite(unit, tiles) {
+    const g = this.game;
+    let best = null;
+    for (const tile of tiles) {
+      for (const target of g.infestTargetsFrom(unit, tile.x, tile.y)) {
+        // 高い虫ほど うばう・弱らせる かちが 大きい
+        const score = UNITS[target.type].cost;
+        if (!best || score > best.score) best = { type: 'infest', tile, target, score };
+      }
+    }
+    if (best) return best;
+
+    const prey = this.bestPrey(unit);
+    if (prey) {
+      const tile = this.stepToward(unit, tiles, prey);
+      if (tile) return { type: 'move', tile };
+    }
+    return { type: 'wait', tile: { x: unit.x, y: unit.y } };
+  }
+
+  // 寄生ユニットが ねらうべき えもの。
+  // のっとりは 弱った虫にしか きかないので、その 条件も 見て えらぶ。
+  bestPrey(unit) {
+    const g = this.game;
+    const p = g.parasiteSpec(unit);
+    const enemies = g.units.filter((u) => u.hp > 0 && u.team !== unit.team && !u.parasite && !u.zombie);
+    const ready = p.needHalfHp ? enemies.filter((u) => u.hp <= 50) : enemies;
+    const list = ready.length ? ready : enemies;
+
+    let best = null;
+    let bestScore = -Infinity;
+    for (const e of list) {
+      const score = UNITS[e.type].cost / 1000 - distance(unit, e);
+      if (score > bestScore) {
+        bestScore = score;
+        best = e;
+      }
+    }
+    return best;
+  }
+
+  // いちばん近い 自陣（寄生を なおせる場所）
+  nearestHome(unit) {
+    return this.pickNearest(unit, this.game.propsOf(this.team));
   }
 
   nearestCapturable(unit) {
@@ -184,6 +256,9 @@ export class AI {
       report.hpBefore = { attacker: unit.hp, defender: action.target.hp };
       report.terrainId = g.terrainIdAt(action.target.x, action.target.y);
       report.result = g.attack(unit, action.target);
+    } else if (action.type === 'infest') {
+      report.target = action.target;
+      report.result = g.infest(unit, action.target);
     } else if (action.type === 'capture') {
       report.result = g.capture(unit);
     }
@@ -204,21 +279,41 @@ export class AI {
       const kind = g.canProduceAt(base.x, base.y, this.team);
       if (!kind) continue;
 
-      const affordable = Object.values(UNITS)
-        .filter((u) => (u.moveType === 'air' ? 'air' : 'ground') === kind)
-        .filter((u) => u.cost <= g.funds[this.team]);
+      const world = g.mapData.world || 99;
+      const mine = g.unitsOf(this.team);
+      const affordable = producibleAt(kind, world).filter((u) => u.cost <= g.funds[this.team]);
       if (!affordable.length) continue;
 
-      // お金を ためこまず、そのとき 買える中で 強い虫を えらぶ。
-      // ただし 占領する虫が いなくなると こまるので、たまに アリも まぜる。
-      const needCapturer = g.unitsOf(this.team).filter((u) => UNITS[u.type].canCapture).length < 2;
+      const priciest = (list) => list.reduce((a, b) => (a.cost > b.cost ? a : b));
+      const fighters = affordable.filter((u) => !u.parasite);
+      const parasites = affordable.filter((u) => u.parasite);
+
+      // 寄生ユニットは こうげき力が ゼロ。ねだんは 高いが「強い虫」では ない。
+      // ねだん順に えらぶと ハリガネムシ(12000)を カブトムシ(7000)より 先に 買ってしまい、
+      // 何も こうげき できない軍に なる。
+      //
+      // なので 寄生ユニットは「ぜいたく品」として あつかう。
+      // 本隊が そろっていて、しかも 買っても なお 戦う虫を 1体 買えるだけの
+      // お金が あるときにしか 手を出さない。回数では なく お金で 線を 引くのは、
+      // 面ごとの 事情（収入・拠点の数）に ひとりでに 合うから。
+      const fighterCount = mine.filter((u) => !UNITS[u.type].parasite).length;
+      const hasParasite = mine.some((u) => UNITS[u.type].parasite);
+      const luxury =
+        !hasParasite &&
+        fighterCount >= 5 &&
+        parasites.length > 0 &&
+        fighters.length > 0 &&
+        g.funds[this.team] >= priciest(parasites).cost + priciest(fighters).cost;
+
+      // 占領する虫が いなくなると 収入が 止まるので、そこは 最ゆうせん
+      const needCapturer = mine.filter((u) => UNITS[u.type].canCapture).length < 2;
       const capturers = affordable.filter((u) => u.canCapture);
+
       let pick;
-      if (needCapturer && capturers.length) {
-        pick = capturers.reduce((a, b) => (a.cost > b.cost ? a : b));
-      } else {
-        pick = affordable.reduce((a, b) => (a.cost > b.cost ? a : b));
-      }
+      if (needCapturer && capturers.length) pick = priciest(capturers);
+      else if (luxury) pick = priciest(parasites);
+      else if (fighters.length) pick = priciest(fighters);
+      else continue; // 寄生ユニットしか 買えないなら 買わずに お金を のこす
 
       const unit = g.produce(base.x, base.y, pick.id, this.team);
       if (unit) made.push(unit);

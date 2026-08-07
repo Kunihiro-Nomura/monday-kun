@@ -36,12 +36,14 @@ export const TERRAIN = {
     name: '小川',
     color: '#7fc4e8',
     def: 0,
+    sinks: true, // ハリガネムシに あやつられた虫が むかう 水べ
     move: { foot: 2, ground: null, air: 1, water: 1 },
   },
   water: {
     name: '池',
     color: '#3d8fd1',
     def: 0,
+    sinks: true, // ハリガネムシに あやつられた虫が むかう 水べ
     move: { foot: null, ground: null, air: 1, water: 1 },
     note: 'ゲンゴロウやタガメがすむ池。水の中を泳げる虫だけが入れる。',
   },

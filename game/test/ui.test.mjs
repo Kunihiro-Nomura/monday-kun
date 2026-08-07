@@ -71,8 +71,14 @@ await shot(page, '03-game');
 await page.evaluate(() => window.__e2e.startStage('w1s3'));
 await page.waitForTimeout(600);
 
+// バランス調整で 面の 虫の数は 変わる。数字を 直書きすると そのたびに 落ちるので、
+// マップデータから 数える。
+const startUnits = await page.evaluate(async () => {
+  const { getMap } = await import('../js/data/maps.js');
+  return getMap('w1s3').units.length;
+});
 let s = await state();
-check('盤面に ユニットが 配置される', s.units.length === 6, `${s.units.length}体`);
+check('盤面に ユニットが 配置される', s.units.length === startUnits, `${s.units.length}体／データは ${startUnits}体`);
 check('プレイヤーのターンで はじまる', s.turnTeam === 'player');
 
 console.log('\n== 動かす ==');
@@ -252,7 +258,7 @@ if (nest) {
   await page.locator('.produce-item:not([disabled])').first().click();
   await page.waitForTimeout(300);
   s = await state();
-  check('虫が うまれる', s.units.length > 6, `${s.units.length}体`);
+  check('虫が うまれる', s.units.length > startUnits, `${s.units.length}体（はじめは ${startUnits}体）`);
   check('お金が へる', s.funds.player < fundsBefore, `${fundsBefore} → ${s.funds.player}`);
   const born = s.units.find((u) => u.x === nest.x && u.y === nest.y);
   check('うまれた ターンは 動けない', born?.acted === true);
@@ -275,13 +281,107 @@ const enemyMoved = s.units.filter((u) => u.team === 'enemy');
 check('敵ユニットが 生きている / 動いている', enemyMoved.length > 0, `${enemyMoved.length}体`);
 await shot(page, '08-after-ai');
 
+console.log('\n== 寄生・のっとり ==');
+// PLAN.md §3.3 の 目玉。画面から ほんとうに 使えるかを たしかめる。
+{
+  await page.evaluate(() => window.__e2e.startStage('w6s1'));
+  await page.waitForTimeout(500);
+
+  // 敵カブトムシを 弱らせて、アリタケの となりに よせる
+  const pos = await page.evaluate(() => {
+    const g = window.__e2e.game;
+    const worm = g.unitsOf('player').find((u) => u.type === 'aritake');
+    const prey = g.unitsOf('enemy').find((u) => u.type === 'kabuto');
+    prey.hp = 40;
+    prey.x = worm.x;
+    prey.y = worm.y - 1;
+    window.__e2e.renderer.draw();
+    return { wx: worm.x, wy: worm.y, px: prey.x, py: prey.y };
+  });
+
+  await tapTile(pos.wx, pos.wy); // えらぶ
+  await tapTile(pos.wx, pos.wy); // その場で とまる → 行動メニュー
+  const labels = await page.locator('#actions .btn').allTextContents();
+  check('寄生ユニットに「のっとる」が 出る', labels.some((t) => t.startsWith('のっとる')), labels.join('／'));
+  check('寄生ユニットに「こうげき」は 出ない', !labels.includes('こうげき'));
+  await shot(page, '10-infest-menu');
+
+  await page.locator('#actions .btn', { hasText: 'のっとる' }).first().click();
+  await page.waitForTimeout(200);
+  await tapTile(pos.px, pos.py);
+  await page.waitForTimeout(500);
+
+  const z = await page.evaluate(() => {
+    const g = window.__e2e.game;
+    const zombie = g.units.find((u) => u.zombie);
+    return zombie ? { type: zombie.type, team: zombie.team, hp: zombie.hp } : null;
+  });
+  check('敵が 味方に なる', z && z.team === 'player' && z.type === 'kabuto', JSON.stringify(z));
+  const wormGone = await page.evaluate(() => !window.__e2e.game.units.some((u) => u.type === 'aritake'));
+  check('とりついた 寄生ユニットは 盤から きえる', wormGone);
+  await shot(page, '11-takeover');
+
+  // 弱っていくことを たしかめる（毎ターン へる）
+  const hpBefore = z.hp;
+  await page.evaluate(() => window.__e2e.game.startTurn('player'));
+  const hpAfter = await page.evaluate(() => (window.__e2e.game.units.find((u) => u.zombie) || {}).hp ?? 0);
+  check('のっとった虫は 毎ターン 弱る', hpAfter < hpBefore, `${hpBefore} → ${hpAfter}`);
+}
+
+console.log('\n== マップエディタ ==');
+// エディタの 出力が maps.js の 形と ずれると、貼ったとたんに 面が こわれる。
+// 「読みこんで → 出して → もとと 同じか」を 全部の面で ためす。
+{
+  const ed = await ctx.newPage();
+  const edErrors = [];
+  ed.on('pageerror', (e) => edErrors.push(e.message));
+  await ed.goto(`${BASE}/tools/editor.html`, { waitUntil: 'networkidle' });
+  await ed.waitForTimeout(300);
+
+  const ids = await ed.$$eval('#load option', (os) => os.map((o) => o.value));
+  check('エディタが ぜんぶの面を 読める', ids.length >= 8, `${ids.length}面`);
+
+  const diffs = [];
+  for (const id of ids) {
+    await ed.selectOption('#load', id);
+    await ed.click('#btn-load');
+    await ed.waitForTimeout(60);
+    const text = await ed.inputValue('#out');
+    // 出した文字列を そのまま 評価して、もとの面と くらべる
+    const same = await ed.evaluate(async (src) => {
+      const { getMap } = await import('../js/data/maps.js');
+      const produced = eval(`(${src.trim().replace(/,$/, '')})`);
+      const original = getMap(produced.id);
+      const norm = (m) => JSON.stringify({
+        id: m.id, world: m.world, stage: m.stage, name: m.name, hint: m.hint,
+        aiLevel: m.aiLevel, startFunds: m.startFunds,
+        incomePerProperty: m.incomePerProperty ?? 1000,
+        rows: m.rows,
+        owners: [...(m.owners || [])].sort((a, b) => a.y - b.y || a.x - b.x),
+        units: [...(m.units || [])].sort((a, b) => a.y - b.y || a.x - b.x),
+        steps: m.steps || [],
+      });
+      return norm(produced) === norm(original);
+    }, text);
+    if (!same) diffs.push(id);
+  }
+  check('読みこんで 出しなおすと もとと 同じに なる', diffs.length === 0, diffs.length ? `ずれた面: ${diffs.join('、')}` : `${ids.length}面 すべて 一致`);
+  check('エディタで JSエラーが 出ない', edErrors.length === 0, edErrors.join(' / '));
+  await ed.close();
+}
+
 console.log('\n== 昆虫ずかん ==');
 
 await page.evaluate(() => window.__e2e.show('zukan'));
 await page.waitForTimeout(300);
 const known = await page.locator('.zukan-card:not(.unknown)').count();
 const total = await page.locator('.zukan-card').count();
-check('ずかんが ひらく', total === 8, `${total}まい`);
+// 虫を 足すたびに 数字を 書きかえるのは 忘れやすい。データから 数える。
+const unitCount = await page.evaluate(async () => {
+  const { UNITS } = await import('../js/data/units.js');
+  return Object.keys(UNITS).length;
+});
+check('ずかんが ひらく', total === unitCount, `${total}まい／虫は ${unitCount}しゅるい`);
 check('たたかいに 出た虫が 図かんに のる', known >= 2, `${known}しゅるい`);
 await shot(page, '09-zukan');
 

@@ -14,7 +14,7 @@
 import { UNITS } from './data/units.js';
 import { TERRAIN } from './data/terrain.js';
 import { hpBars } from './engine.js';
-import { getSprite } from './render.js';
+import { getSprite, getSpriteFill } from './render.js';
 
 const SETTING_KEY = 'konchu-senso/battle-anim/v1';
 const SEEN_KEY = 'konchu-senso/battle-seen/v1';
@@ -144,6 +144,56 @@ const MOTIONS = {
     particle: 'catch',
   },
 };
+
+// 戦闘画面では、実物の 体長に あわせて 大きさを 変える。
+// アリ(5mm)と カブトムシ(45mm)が 同じ大きさに 見えるのは おかしいし、
+// 「どっちが 大きい虫か」は それ自体が 学びになる。
+// 体長の差は 20倍もあるので、そのままだと アリが 点になる。対数で ゆるめる。
+const MIN_MM = 5;
+const MAX_MM = 100;
+function battleScale(type) {
+  const mm = Math.max(MIN_MM, Math.min(MAX_MM, UNITS[type]?.bodyMm || 30));
+  const t = (Math.log(mm) - Math.log(MIN_MM)) / (Math.log(MAX_MM) - Math.log(MIN_MM));
+  return 0.38 + 0.62 * t;
+}
+
+// 絵文字は 字の わくを はみ出して 描かれる（実測で 1.1倍ほど）。
+// はみ出す量は 端末の 絵文字フォントで ちがう（iPhone と Android で 別）ので、
+// きめうちの 数字では なく、その場で はかる。
+// これを しないと、絵の ある虫より 絵文字の虫が 大きく 見えてしまう。
+const emojiFillCache = new Map();
+function emojiFill(icon) {
+  if (emojiFillCache.has(icon)) return emojiFillCache.get(icon);
+  let fill = 1.1;
+  try {
+    const S = 128;
+    const px = 64;
+    const cv = document.createElement('canvas');
+    cv.width = cv.height = S;
+    const c = cv.getContext('2d', { willReadFrequently: true });
+    c.font = `${px}px system-ui, "Apple Color Emoji", sans-serif`;
+    c.textAlign = 'center';
+    c.textBaseline = 'middle';
+    c.fillText(icon, S / 2, S / 2);
+    const d = c.getImageData(0, 0, S, S).data;
+    let x0 = S, y0 = S, x1 = -1, y1 = -1;
+    for (let y = 0; y < S; y++) {
+      for (let x = 0; x < S; x++) {
+        if (d[(y * S + x) * 4 + 3] > 16) {
+          if (x < x0) x0 = x;
+          if (x > x1) x1 = x;
+          if (y < y0) y0 = y;
+          if (y > y1) y1 = y;
+        }
+      }
+    }
+    if (x1 >= 0) fill = Math.max(x1 - x0 + 1, y1 - y0 + 1) / px;
+  } catch (e) {
+    // はかれない 端末では きめうちの 数字で いく
+  }
+  emojiFillCache.set(icon, fill);
+  return fill;
+}
 
 function motionFor(type) {
   return MOTIONS[UNITS[type]?.motion] || MOTIONS.bite;
@@ -436,16 +486,23 @@ export class BattleScene {
     ctx.translate(x, y - size * 0.42);
     ctx.rotate(rot);
 
+    // size は「マスぶんの わく」。そこに 実物の 大きさ比べを かける。
+    const target = size * battleScale(side.type);
+
     const sprite = getSprite(side.type);
     if (sprite) {
       // 盤面用の「真上から」の絵を そのまま つかう。
       // 90度 まわして 向かい合わせる案も 試したが、虫が 横倒しに 見えて しまう。
       // ちゃんと 向かい合わせるには 横向き専用の 絵が いる（ART_SPEC §3.2）。
       // それが そろうまでは、立ったまま 見せる。
-      ctx.drawImage(sprite, -size / 2, -size / 2, size, size);
+      // 絵には 余白が あるので、その ぶん 大きく 描いて
+      // 虫そのものが target の 大きさに なるようにする
+      const box = target / getSpriteFill(side.type);
+      ctx.drawImage(sprite, -box / 2, -box / 2, box, box);
     } else {
       if (flip) ctx.scale(-1, 1);
-      ctx.font = `${Math.round(size)}px system-ui, "Apple Color Emoji", sans-serif`;
+      // 絵文字が はみ出す ぶんを ちぢめて、虫そのものが target の 大きさに なるようにする
+      ctx.font = `${Math.round(target / emojiFill(spec.icon))}px system-ui, "Apple Color Emoji", sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(spec.icon, 0, 0);

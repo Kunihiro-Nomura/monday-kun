@@ -1,0 +1,74 @@
+name: ゲームのテスト
+
+# ゲームのコードを さわったら 自動で テストする。
+#
+# art.yml は 絵が 届いたときだけ 動く。
+# 人が 見ていない あいだ（お盆・出張中など）に コードを 変えると、
+# こわれたまま main に 入ってしまう。それを ふせぐ。
+#
+# 落ちた理由は ログに 日本語で 出るので、そのまま Claude や ChatGPT に わたせる。
+
+on:
+  push:
+    paths:
+      - 'game/**'
+      - 'scripts/**'
+      - '.github/workflows/test.yml'
+  pull_request:
+    paths:
+      - 'game/**'
+      - 'scripts/**'
+      - '.github/workflows/test.yml'
+  workflow_dispatch:
+
+jobs:
+  rules:
+    name: ルールと マップデータ
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # ブラウザは いらない。80面ぶんの マップデータの 検証も ここで 通る。
+      - name: ルールの単体テスト
+        run: node game/test/engine.test.mjs
+
+      # 一方的な面が できていないか、数字で 見せる（落ちはしない・目で 見るため）
+      - name: ステージの むずかしさ
+        run: node scripts/measure-stages.mjs
+
+  screen:
+    name: 画面のながれ（iPhone サイズ）
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Playwright を 入れる
+        run: |
+          npm init -y >/dev/null
+          npm install --no-save playwright@latest
+          npx playwright install --with-deps chromium
+
+      - name: ゲームを 立ち上げる
+        run: |
+          npx --yes http-server game -p 8123 -c-1 &
+          npx --yes wait-on http://localhost:8123/index.html --timeout 60000
+
+      - name: 画面のテスト
+        env:
+          GAME_URL: http://localhost:8123
+        run: node game/test/ui.test.mjs artifacts
+
+      # 落ちたときに 何が 映っていたのかを 見られるようにしておく
+      - name: スクリーンショットを のこす
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots
+          path: artifacts
+          if-no-files-found: ignore

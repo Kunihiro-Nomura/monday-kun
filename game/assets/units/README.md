@@ -14,25 +14,35 @@
 
 ## ユニットID
 
-| ID | 和名 |
-|---|---|
-| `ant` | アリ |
-| `mantis` | カマキリ |
-| `ladybug` | テントウムシ |
-| `kabuto` | カブトムシ |
-| `kuwagata` | オオクワガタ |
-| `bombardier` | ミイデラゴミムシ |
-| `hornet` | オオスズメバチ |
-| `dragonfly` | オニヤンマ |
+`js/data/units.js` の キーが そのまま ID に なります。
 
-（今後ユニットを追加したら、`js/data/units.js` のキーがそのままIDになります）
+| ID | 和名 | 出てくる世界 |
+|---|---|---|
+| `ant` | アリ | 1 |
+| `mantis` | カマキリ | 1 |
+| `ladybug` | テントウムシ | 1 |
+| `kabuto` | カブトムシ | 1 |
+| `kuwagata` | オオクワガタ | 1 |
+| `bombardier` | ミイデラゴミムシ | 1 |
+| `hornet` | オオスズメバチ | 1 |
+| `dragonfly` | オニヤンマ | 1 |
+| `komayubachi` | コマユバチ（寄生） | 4 |
+| `yadoribae` | ヤドリバエ（寄生） | 4 |
+| `harigane` | ハリガネムシ（寄生） | 5 |
+| `aritake` | タイワンアリタケ（寄生） | 6 |
+
+正確な発注内容は [`../../art/orders.json`](../../art/orders.json) にあります。
+`node scripts/make-brief.mjs <ID>` で、そのまま渡せる発注書が出ます。
 
 ## 置いたあと
 
 1. PNG をこのフォルダに置く
-2. `manifest.json` の `units` にそのIDを追加する（例: `"units": ["kabuto"]`）
-3. ブラウザを再読み込みする
-コンソールに `スプライト n/8 体を 読みこみました` と出ます。
+2. `node scripts/build-manifest.mjs` を実行する
+   （`manifest.json` は **自動生成**です。手で書かないでください）
+3. `node scripts/check-assets.mjs` で 受け入れ検査（透過・サイズ・余白）
+4. ブラウザを再読み込みする
+
+コンソールに `スプライト n/12 体を 読みこみました` と出ます。
 
 **注意**: `sw.js`（オフライン用キャッシュ）の `VERSION` を上げないと、
 ホーム画面に追加ずみの端末では古い絵が残ることがあります。

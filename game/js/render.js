@@ -19,7 +19,10 @@ const sprites = new Map();
 export async function loadSprites(basePath = 'assets/units') {
   let ids = [];
   try {
-    const res = await fetch(`${basePath}/manifest.json`);
+    // cache: 'no-cache' を つけないと、ブラウザが 古い manifest（絵がまだ無い頃のもの）を
+    // 返してしまい、絵を 置いたのに 絵文字のままに 見える。
+    // GitHub Pages は max-age=300 で 配信するので、これが ないと 5分間 反映されない。
+    const res = await fetch(`${basePath}/manifest.json`, { cache: 'no-cache' });
     if (res.ok) {
       const data = await res.json();
       if (Array.isArray(data.units)) ids = data.units.filter((id) => UNITS[id]);

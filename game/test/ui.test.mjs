@@ -63,7 +63,13 @@ await shot(page, '02-stages');
 await page.locator('.stage-card:not(.locked)').first().click();
 await page.waitForTimeout(500);
 check('ゲーム画面に 入る', await page.locator('#screen-game.active').isVisible());
+check('チュートリアルの 手びきが 出る', await page.locator('#tutorial').isVisible());
 await shot(page, '03-game');
+
+// ここから先は しくみの テストなので、要素が そろった面（w1s3）で 行う。
+// 1面は 手びき用に わざと かんたんに してある。
+await page.evaluate(() => window.__e2e.startStage('w1s3'));
+await page.waitForTimeout(600);
 
 let s = await state();
 check('盤面に ユニットが 配置される', s.units.length === 6, `${s.units.length}体`);

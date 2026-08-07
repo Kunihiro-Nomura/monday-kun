@@ -5,7 +5,7 @@
 import assert from 'node:assert/strict';
 import { Game, hpBars, CAPTURE_POINTS } from '../js/engine.js';
 import { AI } from '../js/ai.js';
-import { MAPS } from '../js/data/maps.js';
+import { MAPS, getMap } from '../js/data/maps.js';
 import { UNITS, DAMAGE, baseDamage } from '../js/data/units.js';
 import { TERRAIN, CHAR_TO_TERRAIN } from '../js/data/terrain.js';
 
@@ -93,9 +93,76 @@ test('どの飛行ユニットも 地上ユニット だけでは たおせな�
   }
 });
 
+console.log('\n== チュートリアルの やさしさ ==');
+// 実機テストで「1面が難しすぎて先に進めない」と言われた。
+// AI同士で戦わせたら 平均18ターン・勝率33% という、初心者向けでない難度だった。
+// 同じことを くり返さないよう、やさしさを 数字で しばる。
+
+test('1面は 敵ユニットが 1体だけ', () => {
+  const m = getMap('w1s1');
+  const enemies = m.units.filter((u) => u.team === 'enemy');
+  assert.ok(enemies.length <= 1, `敵が ${enemies.length}体 いる`);
+});
+
+test('1面は 敵が 虫を つくれない（生産拠点を もたない）', () => {
+  const g = new Game(getMap('w1s1'));
+  const canProduce = g.propsOf('enemy').filter((p) => g.terrainAt(p.x, p.y).produce);
+  assert.equal(canProduce.length, 0, `敵が 生産拠点を ${canProduce.length}個 もっている`);
+});
+
+test('1面・2面は 手びき（steps）が ついている', () => {
+  for (const id of ['w1s1', 'w1s2']) {
+    const m = getMap(id);
+    assert.ok(m.steps && m.steps.length >= 3, `${id} に 手びきが ない`);
+  }
+});
+
+test('1面は AI同士でも 12ターン以内に 決着する', () => {
+  // プレイヤーが 何も わからなくても 短時間で 終わる、が 目安
+  const results = [];
+  for (let i = 0; i < 20; i++) {
+    const g = new Game(getMap('w1s1'));
+    const red = new AI(g, 1);
+    const blue = new AI(g, 1);
+    blue.team = 'player';
+    for (let t = 0; t < 40 && g.status === 'playing'; t++) {
+      const actor = g.turnTeam === 'enemy' ? red : blue;
+      let guard = 0;
+      while (actor.takeOneAction() && guard++ < 100);
+      actor.produce();
+      if (g.status !== 'playing') break;
+      g.endTurn();
+    }
+    results.push(g.status === 'playing' ? Infinity : g.turnCount);
+  }
+  const worst = Math.max(...results);
+  assert.ok(worst <= 12, `いちばん長いときで ${worst} ターン かかる`);
+});
+
+test('1面は プレイヤーが ほぼ 負けない', () => {
+  let lost = 0;
+  for (let i = 0; i < 20; i++) {
+    const g = new Game(getMap('w1s1'));
+    const red = new AI(g, 1);
+    const blue = new AI(g, 1);
+    blue.team = 'player';
+    for (let t = 0; t < 40 && g.status === 'playing'; t++) {
+      const actor = g.turnTeam === 'enemy' ? red : blue;
+      let guard = 0;
+      while (actor.takeOneAction() && guard++ < 100);
+      actor.produce();
+      if (g.status !== 'playing') break;
+      g.endTurn();
+    }
+    if (g.status === 'lose') lost++;
+  }
+  assert.equal(lost, 0, `20回中 ${lost}回 負けた`);
+});
+
 console.log('\n== 移動 ==');
 
-const map1 = MAPS[0];
+// 面の 並び順に たよると、面を 足したときに 壊れる。ID で 名ざしする。
+const map1 = getMap('w1s3'); // 樹液場・巣・カブトムシが そろった 標準的な面
 
 test('アリの 移動はんいが 移動力どおりに なる', () => {
   const g = new Game(map1);
@@ -149,7 +216,7 @@ test('HPが へると こうげき力も さがる', () => {
 });
 
 test('まもりの かたい地形では ダメージが へる', () => {
-  const g = new Game(MAPS[1]);
+  const g = new Game(getMap('w1s4'));
   const attacker = g.unitsOf('player').find((u) => u.type === 'kabuto');
   const defender = g.unitsOf('enemy').find((u) => u.type === 'ant');
 
@@ -164,7 +231,7 @@ test('まもりの かたい地形では ダメージが へる', () => {
 });
 
 test('飛ぶ虫は 地形の まもりを 受けない', () => {
-  const g = new Game(MAPS[2]);
+  const g = new Game(getMap('w1s5'));
   const mantis = g.unitsOf('player').find((u) => u.type === 'mantis');
   const hornet = g.unitsOf('enemy').find((u) => u.type === 'hornet');
   const forest = findTerrain(g, 'forest');
@@ -177,7 +244,7 @@ test('飛ぶ虫は 地形の まもりを 受けない', () => {
 });
 
 test('間接こうげきは はんげきを うけない', () => {
-  const g = new Game(MAPS[1]);
+  const g = new Game(getMap('w1s4'));
   const bomb = g.unitsOf('player').find((u) => u.type === 'bombardier');
   const enemy = g.unitsOf('enemy').find((u) => u.type === 'ant');
   // となりに おいても、間接こうげき側は はんげきを うけない仕様
@@ -188,7 +255,7 @@ test('間接こうげきは はんげきを うけない', () => {
 });
 
 test('間接こうげきは 動いたターンには うてない', () => {
-  const g = new Game(MAPS[1]);
+  const g = new Game(getMap('w1s4'));
   const bomb = g.unitsOf('player').find((u) => u.type === 'bombardier');
   const enemy = g.unitsOf('enemy')[0];
   bomb.x = enemy.x; bomb.y = enemy.y + 2;
@@ -282,7 +349,7 @@ test('巣では 飛ぶ虫を つくれない（花畑が いる）', () => {
 });
 
 test('花畑では 飛ぶ虫を つくれる', () => {
-  const g = new Game(MAPS[2]);
+  const g = new Game(getMap('w1s5'));
   const flower = g.propsOf('player').find((p) => g.terrainIdAt(p.x, p.y) === 'flower');
   g.funds.player = 99999;
   const unit = g.produce(flower.x, flower.y, 'dragonfly', 'player');

@@ -169,6 +169,7 @@ function startStage(mapId) {
   game.startTurn('player');
 
   show('game');
+  startTutorial(currentMap);
   setBanner(`せかい${currentMap.world}-${currentMap.stage}　${currentMap.name}`, 2200);
   setTileInfo(currentMap.hint);
   refresh();
@@ -200,6 +201,28 @@ function updateHud() {
   document.getElementById('hud-count').textContent = `ターン ${game.turnCount}`;
   document.getElementById('hud-funds').textContent = `💰 ${game.funds.player.toLocaleString()}`;
   document.getElementById('btn-endturn').disabled = game.turnTeam !== 'player' || game.status !== 'playing';
+}
+
+// ---- 手びき（チュートリアル） ----
+// マップに steps があれば、順番に 出していく。
+// シミュレーションゲームを はじめて さわる子でも、次に何をすれば
+// よいかが つねに 画面に 出ている ようにする。
+const tutorialEl = document.getElementById('tutorial');
+let tutorialQueue = [];
+
+function startTutorial(map) {
+  tutorialQueue = (map.steps || []).map((s) => ({ ...s }));
+  tutorialEl.classList.add('hidden');
+  fireTutorial('start');
+}
+
+// on に あう手びきが 先頭にあれば 出して、次へ すすめる
+function fireTutorial(event) {
+  if (!tutorialQueue.length) return;
+  if (tutorialQueue[0].on !== event) return;
+  const step = tutorialQueue.shift();
+  tutorialEl.textContent = step.text;
+  tutorialEl.classList.remove('hidden');
 }
 
 function setBanner(text, ms = 1600) {
@@ -292,6 +315,7 @@ function tapIdle(x, y) {
 
   if (unit && unit.team === 'player' && !unit.acted && game.turnTeam === 'player') {
     ui = { mode: 'moving', unit, origin: { x: unit.x, y: unit.y }, moved: false, targets: [] };
+    fireTutorial('select');
     refresh();
     return;
   }
@@ -311,6 +335,7 @@ function tapMoving(x, y) {
     ui.moved = x !== ui.origin.x || y !== ui.origin.y;
     ui.mode = 'action';
     showActionMenu();
+    fireTutorial('action');
     refresh();
     return;
   }
@@ -358,6 +383,7 @@ async function tapTarget(x, y) {
     // えらび直し
     ui.mode = 'action';
     showActionMenu();
+    fireTutorial('action');
     refresh();
     return;
   }
@@ -417,8 +443,10 @@ function showActionMenu() {
       const res = game.capture(unit);
       if (res && res.captured) {
         setBanner(`${game.terrainAt(unit.x, unit.y).name} を せんりょう した！`, 1800);
+        fireTutorial('captured');
       } else if (res) {
         setBanner(`せんりょう ちゅう… あと ${res.remaining}`, 1500);
+        fireTutorial('capture');
       }
       game.commitUnit(unit);
       finishAction();
@@ -427,6 +455,7 @@ function showActionMenu() {
 
   addAction('まつ', () => {
     game.commitUnit(unit);
+    fireTutorial('wait');
     finishAction();
   });
 
@@ -529,6 +558,7 @@ async function runAITurn() {
   ui.mode = 'ai';
   hideActionMenu();
   setBanner('あかチームの ターン', 1400);
+  fireTutorial('enemyTurn');
   updateHud();
   await sleep(600);
 
@@ -573,6 +603,7 @@ async function runAITurn() {
   game.endTurn();
   ui = { mode: 'idle', unit: null, origin: null, moved: false, targets: [] };
   setBanner('あおチームの ターン', 1400);
+  fireTutorial('playerTurn');
   setTileInfo('虫を タップして えらぼう');
   refresh();
 }

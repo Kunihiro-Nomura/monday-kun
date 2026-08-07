@@ -4,7 +4,9 @@
 // ホーム画面に ついかしたあと、電波がなくても あそべるようにする。
 // バージョンを 上げると 古いキャッシュを すてて 入れかえる。
 
-const VERSION = 'konchu-senso-v1';
+// ⚠ ファイルを 足したり 中身を 変えたら、かならず この数字を 上げること。
+// 上げ忘れると、ホーム画面に ついかずみの 端末で 古い版が 残りつづける。
+const VERSION = 'konchu-senso-v3';
 
 const ASSETS = [
   './',
@@ -19,6 +21,8 @@ const ASSETS = [
   './js/data/units.js',
   './js/data/terrain.js',
   './js/data/maps.js',
+  './assets/units/manifest.json',
+  './assets/units/kabuto.png',
   './icons/icon-192.png',
   './icons/icon-512.png',
 ];

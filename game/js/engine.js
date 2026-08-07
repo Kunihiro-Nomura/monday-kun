@@ -6,6 +6,7 @@
 
 import { TERRAIN, CHAR_TO_TERRAIN } from './data/terrain.js';
 import { UNITS, baseDamage } from './data/units.js';
+import { getDifficulty } from './data/difficulty.js';
 
 export const CAPTURE_POINTS = 20;
 const MAX_HP = 100; // 内部は 100。画面には 10段階で見せる。
@@ -23,8 +24,11 @@ export function hpBars(hp100) {
 }
 
 export class Game {
-  constructor(mapData) {
+  // options.difficulty … むずかしさ（data/difficulty.js の ID か、その表そのもの）。
+  // 書かなければ「はじめて」＝ いままでと まったく 同じ つよさに なる。
+  constructor(mapData, options = {}) {
     this.mapData = mapData;
+    this.difficulty = getDifficulty(options.difficulty);
     this.height = mapData.rows.length;
     this.width = mapData.rows[0].length;
 
@@ -94,12 +98,23 @@ export class Game {
     return UNITS[unit.type];
   }
 
-  // 寄生・のっとりの えいきょうを 入れた こうげき力の ばいりつ。
+  // 寄生・のっとり・むずかしさの えいきょうを 入れた こうげき力の ばいりつ。
   // 素の 数値は 書きかえず、参照するときに かける。
   // こうしておくと 効果が かさなっても もとの数値が こわれない。
   effectivePower(unit) {
     const p = unit.parasite && UNITS[unit.parasite.type].parasite;
-    return p && p.power != null ? p.power : 1;
+    const parasitePower = p && p.power != null ? p.power : 1;
+    return parasitePower * this.teamPower(unit.team);
+  }
+
+  // むずかしさによる チームごとの こうげき力の ばいりつ。
+  // かけるのは あかチームだけ。プレイヤーの 数値を いじると、
+  // 図かんに 書いてある つよさと 手ざわりが 合わなくなってしまう。
+  //
+  // team で 見るので、のっとられて あかチームに なった虫は そのまま つよくなり、
+  // うばい返せば もとに もどる。「どちらの 手に あるか」で きまるほうが すじが とおる。
+  teamPower(team) {
+    return team === 'enemy' ? this.difficulty.enemyPower : 1;
   }
 
   inBounds(x, y) {

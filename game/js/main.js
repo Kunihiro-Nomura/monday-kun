@@ -11,9 +11,11 @@ import { BattleScene, getBattleMode, setBattleMode, hasSeenFight } from './battl
 import { MAPS, WORLDS, getMap } from './data/maps.js';
 import { UNITS, baseDamage, producibleAt } from './data/units.js';
 import { TERRAIN } from './data/terrain.js';
+import { DIFFICULTY_LIST, DEFAULT_DIFFICULTY, getDifficulty } from './data/difficulty.js';
 
 const SAVE_KEY = 'konchu-senso/progress/v1';
 const ZUKAN_KEY = 'konchu-senso/zukan/v1';
+const DIFFICULTY_KEY = 'konchu-senso/difficulty/v1';
 
 // ---- セーブデータ ----
 // Safari は ストレージを 消すことがあるので、こわれていても 落ちないようにしておく。
@@ -35,6 +37,20 @@ function saveJSON(key, value) {
 
 let progress = loadJSON(SAVE_KEY, { cleared: {} });
 let zukan = new Set(loadJSON(ZUKAN_KEY, []));
+
+// ---- むずかしさ ----
+// えらんだ ものは 端末に おぼえておく。ここでは ID を もつだけにして、
+// 数値そのものは data/difficulty.js から ひく。
+let difficultyId = getDifficulty(loadJSON(DIFFICULTY_KEY, DEFAULT_DIFFICULTY)).id;
+
+function currentDifficulty() {
+  return getDifficulty(difficultyId);
+}
+
+function setDifficulty(id) {
+  difficultyId = getDifficulty(id).id;
+  saveJSON(DIFFICULTY_KEY, difficultyId);
+}
 
 function discover(types) {
   let added = false;
@@ -61,7 +77,10 @@ function show(name) {
   if (current && current !== name) previousScreen = current;
   Object.values(screens).forEach((s) => s.classList.remove('active'));
   screens[name].classList.add('active');
-  if (name === 'stages') renderStageList();
+  if (name === 'stages') {
+    renderDifficultyChoices();
+    renderStageList();
+  }
   if (name === 'zukan') renderZukan();
   if (name === 'game' && renderer) {
     requestAnimationFrame(() => {
@@ -101,6 +120,27 @@ function closeModal() {
 }
 
 // ---- ステージ選択 ----
+// むずかしさを えらぶ ところ。ステージを えらぶ 画面に おいてあるので、
+// 遊びはじめる 前にも、まけて もどってきた あとにも 変えられる。
+function renderDifficultyChoices() {
+  const box = document.getElementById('difficulty-choices');
+  box.innerHTML = '';
+
+  for (const d of DIFFICULTY_LIST) {
+    const btn = document.createElement('button');
+    btn.className = 'difficulty-choice';
+    btn.dataset.difficulty = d.id;
+    btn.setAttribute('aria-pressed', String(d.id === difficultyId));
+    btn.innerHTML = `${d.name}<span class="difficulty-lead">${d.lead}</span>`;
+    btn.addEventListener('click', () => {
+      setDifficulty(d.id);
+      renderDifficultyChoices();
+    });
+    box.appendChild(btn);
+  }
+  document.getElementById('difficulty-note').textContent = currentDifficulty().note;
+}
+
 function isUnlocked(index) {
   if (index === 0) return true;
   return !!progress.cleared[MAPS[index - 1].id];
@@ -139,7 +179,7 @@ function renderStageList() {
       <div class="stage-body">
         <div class="stage-name">${unlocked ? map.name : '？？？'}</div>
         <div class="stage-hint">${unlocked ? map.hint : 'まえの ステージを クリアすると あそべるよ'}</div>
-        ${cleared ? `<div class="stage-badge">クリア！ ${cleared.turns}ターン</div>` : ''}
+        ${cleared ? `<div class="stage-badge">クリア！ ${cleared.turns}ターン（${getDifficulty(cleared.difficulty).name}）</div>` : ''}
       </div>`;
     if (unlocked) card.addEventListener('click', () => startStage(map.id));
     list.appendChild(card);
@@ -177,7 +217,9 @@ let ui = { mode: 'idle', unit: null, origin: null, moved: false, targets: [] };
 
 function startStage(mapId) {
   currentMap = getMap(mapId);
-  game = new Game(currentMap);
+  // むずかしさは 面が はじまる ときに かたまる。
+  // 遊んでいる とちゅうで 数値が 変わると、たてた さくせんが くずれてしまう。
+  game = new Game(currentMap, { difficulty: difficultyId });
   ai = new AI(game, currentMap.aiLevel || 1);
   ui = { mode: 'idle', unit: null, origin: null, moved: false, targets: [] };
 
@@ -189,7 +231,7 @@ function startStage(mapId) {
 
   show('game');
   startTutorial(currentMap);
-  setBanner(`せかい${currentMap.world}-${currentMap.stage}　${currentMap.name}`, 2200);
+  setBanner(`せかい${currentMap.world}-${currentMap.stage}　${currentMap.name}（${game.difficulty.name}）`, 2200);
   setTileInfo(currentMap.hint);
   refresh();
 }
@@ -657,8 +699,16 @@ document.getElementById('btn-quit').addEventListener('click', () => {
     .map(([v, label]) => `<button class="produce-item" data-mode="${v}">${current === v ? '● ' : '○ '}${label}</button>`)
     .join('');
 
+  // むずかしさも ここから 変えられるようにする。ただし 効くのは 次の面から。
+  // 遊んでいる とちゅうで 数値が 変われば、いまの ばんめんの 見つもりが くるってしまう。
+  const levels = DIFFICULTY_LIST.map(
+    (d) => `<button class="produce-item" data-difficulty="${d.id}">${difficultyId === d.id ? '● ' : '○ '}${d.name}（${d.lead}）</button>`
+  ).join('');
+
   openModal(
     `<h2>せってい</h2><p><b>たたかいの アニメ</b></p>${options}
+     <p style="margin-top:14px"><b>むずかしさ</b>　いまは「${game.difficulty.name}」</p>${levels}
+     <p style="font-size:12px;color:#aebba6;margin-top:6px">かえると つぎの ステージから きりかわるよ。</p>
      <p style="margin-top:14px">ゲームを やめると、とちゅうの たたかいは きえてしまうよ。</p>`,
     [
       { label: 'ゲームを やめる', className: 'danger', onClick: () => show('stages') },
@@ -671,6 +721,14 @@ document.getElementById('btn-quit').addEventListener('click', () => {
       setBattleMode(btn.dataset.mode);
       closeModal();
       setBanner('せっていを かえたよ', 1200);
+    });
+  });
+
+  modalBody.querySelectorAll('[data-difficulty]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      setDifficulty(btn.dataset.difficulty);
+      closeModal();
+      setBanner(`むずかしさを「${currentDifficulty().name}」に かえたよ（つぎの ステージから）`, 2600);
     });
   });
 });
@@ -762,10 +820,17 @@ function checkGameOver() {
   renderer.draw();
 
   if (status === 'win') {
-    const first = !progress.cleared[currentMap.id];
     const record = progress.cleared[currentMap.id];
-    if (!record || game.turnCount < record.turns) {
-      progress.cleared[currentMap.id] = { turns: game.turnCount };
+    const first = !record;
+
+    // ターン数は みじかいほう、むずかしさは きびしいほうを のこす。
+    // かんたんな ほうで 遊びなおしても、いちど とった「ふつうクリア」は 消えない。
+    const best = record && record.turns <= game.turnCount ? record.turns : game.turnCount;
+    const before = record ? getDifficulty(record.difficulty) : null;
+    const hardest = before && before.rank > game.difficulty.rank ? before : game.difficulty;
+
+    if (!record || best !== record.turns || hardest.id !== record.difficulty) {
+      progress.cleared[currentMap.id] = { turns: best, difficulty: hardest.id };
       saveJSON(SAVE_KEY, progress);
     }
     showVictory(first);
@@ -877,8 +942,10 @@ if (new URLSearchParams(location.search).has('e2e')) {
     get game() { return game; },
     get renderer() { return renderer; },
     get ui() { return ui; },
+    get difficulty() { return difficultyId; },
     show,
     startStage,
+    setDifficulty,
   };
 }
 

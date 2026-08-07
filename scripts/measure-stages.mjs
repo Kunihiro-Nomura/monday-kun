@@ -5,6 +5,7 @@
 //   node scripts/measure-stages.mjs          # ぜんぶ
 //   node scripts/measure-stages.mjs w1s6 w1s7
 //   node scripts/measure-stages.mjs --world 1
+//   node scripts/measure-stages.mjs --difficulty normal   # 「ふつう」で はかる
 //
 // 「遊んでみて 難しかった」では 80面を さばけない。
 // 同じ AI どうしで 何回も 回して、決着ターン数と 勝率を 見る。
@@ -15,11 +16,26 @@
 import { Game } from '../game/js/engine.js';
 import { AI } from '../game/js/ai.js';
 import { MAPS, getMap } from '../game/js/data/maps.js';
+import { DIFFICULTIES, DEFAULT_DIFFICULTY, getDifficulty } from '../game/js/data/difficulty.js';
 
 const RUNS = 20;
 const MAX_TURNS = 60;
 
 const args = process.argv.slice(2);
+
+// --difficulty <ID> を さきに 取りのぞく。のこりが 面の 指定に なる。
+let difficulty = DEFAULT_DIFFICULTY;
+const dIndex = args.indexOf('--difficulty');
+if (dIndex >= 0) {
+  const wanted = args[dIndex + 1];
+  if (!DIFFICULTIES[wanted]) {
+    console.error(`むずかしさ "${wanted}" は ありません（${Object.keys(DIFFICULTIES).join(' / ')}）`);
+    process.exit(1);
+  }
+  difficulty = wanted;
+  args.splice(dIndex, 2);
+}
+
 let targets = MAPS;
 if (args[0] === '--world') {
   const w = Number(args[1]);
@@ -37,7 +53,7 @@ if (args[0] === '--world') {
 
 // 1回ぶん 回して、決着したか・何ターンかかったかを かえす
 function playOnce(map) {
-  const g = new Game(map);
+  const g = new Game(map, { difficulty });
   const red = new AI(g, map.aiLevel || 1);
   const blue = new AI(g, map.aiLevel || 1);
   blue.team = 'player';
@@ -53,7 +69,7 @@ function playOnce(map) {
   return { status: g.status, turns: g.turnCount };
 }
 
-console.log(`\n同じ強さの AI どうしで ${RUNS}回ずつ 回した けっか\n`);
+console.log(`\n同じ強さの AI どうしで ${RUNS}回ずつ 回した けっか（むずかしさ: ${getDifficulty(difficulty).name}）\n`);
 console.log('面      名まえ                  決着   あお勝率  ターン(中央値/最長)  ひとこと');
 console.log('─'.repeat(96));
 
@@ -92,6 +108,16 @@ for (const map of targets) {
 console.log('─'.repeat(96));
 console.log(
   anyProblem
-    ? '\n※ ひとこと の ついた面は 見なおす。数字は AI どうしの 目安で、人が 遊ぶと もう少し やさしくなる。\n'
-    : '\nぜんぶの面が 目安の はんいに 入っている。\n'
+    ? '\n※ ひとこと の ついた面は 見なおす。数字は AI どうしの 目安で、人が 遊ぶと もう少し やさしくなる。'
+    : '\nぜんぶの面が 目安の はんいに 入っている。'
 );
+// 目安の 数字（勝率 25〜85%）は「はじめて」に 合わせてある。
+// きびしい むずかしさで はかれば 当然 下に ふれるので、そこで 面を いじらない。
+if (difficulty !== DEFAULT_DIFFICULTY) {
+  console.log(
+    `※「ひとこと」の 目安は ${getDifficulty(DEFAULT_DIFFICULTY).name} 用。` +
+      'きびしい むずかしさで 勝率が 下がるのは 当たりまえなので、面の 調整は かならず ' +
+      `${getDifficulty(DEFAULT_DIFFICULTY).name} で 行う。`
+  );
+}
+console.log('');

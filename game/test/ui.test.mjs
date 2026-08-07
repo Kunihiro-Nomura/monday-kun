@@ -60,6 +60,52 @@ const unlocked = await page.locator('.stage-card:not(.locked)').count();
 check('ステージ1だけ あそべる（あとは ロック）', unlocked === 1, `あそべる ${unlocked} 面`);
 await shot(page, '02-stages');
 
+console.log('\n== むずかしさ えらび ==');
+// PLAN.md §3.11。ステージを えらぶ 前に、目に見えて えらべることを たしかめる。
+{
+  const levels = await page.evaluate(async () => {
+    const { DIFFICULTY_LIST } = await import('../js/data/difficulty.js');
+    return DIFFICULTY_LIST.map((d) => d.id);
+  });
+  const choices = await page.locator('.difficulty-choice').count();
+  check('むずかしさを えらぶ ボタンが ならぶ', choices === levels.length, `${choices}こ／表は ${levels.length}こ`);
+
+  const first = await page.evaluate(() => window.__e2e.difficulty);
+  check('はじめは「はじめて」が えらばれている', first === 'beginner', first);
+
+  // いちばん きびしい ものを えらんで、ほんとうに ゲームに とどくかを 見る
+  const hardest = levels[levels.length - 1];
+  await page.click(`.difficulty-choice[data-difficulty="${hardest}"]`);
+  await page.waitForTimeout(150);
+  const picked = await page.evaluate(
+    (id) => ({
+      saved: window.__e2e.difficulty,
+      pressed: document.querySelector(`.difficulty-choice[data-difficulty="${id}"]`).getAttribute('aria-pressed'),
+      note: document.getElementById('difficulty-note').textContent.trim(),
+    }),
+    hardest
+  );
+  check('えらんだ ものに 印が つく', picked.saved === hardest && picked.pressed === 'true', `${picked.saved}／${picked.pressed}`);
+  check('えらんだ ものの せつめいが 出る', picked.note.length > 0, picked.note);
+  await shot(page, '02b-difficulty');
+
+  await page.evaluate(() => window.__e2e.startStage('w1s3'));
+  await page.waitForTimeout(400);
+  const applied = await page.evaluate(() => ({
+    id: window.__e2e.game.difficulty.id,
+    power: window.__e2e.game.difficulty.enemyPower,
+  }));
+  check('えらんだ むずかしさで ゲームが はじまる', applied.id === hardest, applied.id);
+  check('きびしい ほうは あかチームが つよい', applied.power > 1, `×${applied.power}`);
+
+  // あとの テストは 「はじめて」で 通す（いままでと 同じ 手ざわりを たしかめたい）
+  await page.evaluate(() => window.__e2e.setDifficulty('beginner'));
+  await page.evaluate(() => window.__e2e.show('stages'));
+  await page.waitForTimeout(200);
+  const back = await page.evaluate(() => window.__e2e.difficulty);
+  check('「はじめて」に もどせる', back === 'beginner', back);
+}
+
 await page.locator('.stage-card:not(.locked)').first().click();
 await page.waitForTimeout(500);
 check('ゲーム画面に 入る', await page.locator('#screen-game.active').isVisible());

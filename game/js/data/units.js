@@ -24,6 +24,7 @@ export const UNITS = {
     canCapture: true,
     vision: 2,
     motion: 'bite', // 戦闘アニメの型（battle.js）
+    bodyMm: 5, // 実物のおおよその体長(mm)。戦闘画面の 大きさ比べに つかう
     bio: {
       size: '体長 2〜12mm くらい（しゅるいによる）',
       where: '土の中や木の下。日本中どこにでもいる',
@@ -49,6 +50,7 @@ export const UNITS = {
     canCapture: true,
     vision: 2,
     motion: 'slash', // 戦闘アニメの型（battle.js）
+    bodyMm: 80, // 実物のおおよその体長(mm)。戦闘画面の 大きさ比べに つかう
     bio: {
       size: '体長 7〜9cm くらい（オオカマキリ）',
       where: '草はらや やぶ。えものを じっと まちぶせする',
@@ -74,6 +76,7 @@ export const UNITS = {
     canCapture: false,
     vision: 5,
     motion: 'bite', // 戦闘アニメの型（battle.js）
+    bodyMm: 7, // 実物のおおよその体長(mm)。戦闘画面の 大きさ比べに つかう
     bio: {
       size: '体長 5〜8mm くらい（ナナホシテントウ）',
       where: '草はらや畑。アブラムシのいる草の上',
@@ -99,6 +102,7 @@ export const UNITS = {
     canCapture: false,
     vision: 3,
     motion: 'charge', // 戦闘アニメの型（battle.js）
+    bodyMm: 45, // 実物のおおよその体長(mm)。戦闘画面の 大きさ比べに つかう
     bio: {
       size: '体長 3〜5cm くらい（ツノをふくむ）',
       where: 'クヌギやコナラの雑木林。夜に樹液に集まる',
@@ -124,6 +128,7 @@ export const UNITS = {
     canCapture: false,
     vision: 3,
     motion: 'grab', // 戦闘アニメの型（battle.js）
+    bodyMm: 55, // 実物のおおよその体長(mm)。戦闘画面の 大きさ比べに つかう
     bio: {
       size: '体長 3〜8cm くらい（大アゴをふくむ）',
       where: 'クヌギの雑木林。木の うろ に かくれている',
@@ -149,6 +154,7 @@ export const UNITS = {
     canCapture: false,
     vision: 2,
     motion: 'spray', // 戦闘アニメの型（battle.js）
+    bodyMm: 15, // 実物のおおよその体長(mm)。戦闘画面の 大きさ比べに つかう
     bio: {
       size: '体長 1〜2cm くらい',
       where: '川原や田んぼのそば。石の下など',
@@ -174,6 +180,7 @@ export const UNITS = {
     canCapture: false,
     vision: 4,
     motion: 'dive', // 戦闘アニメの型（battle.js）
+    bodyMm: 38, // 実物のおおよその体長(mm)。戦闘画面の 大きさ比べに つかう
     bio: {
       size: '体長 3〜4cm くらい（オオスズメバチ）',
       where: '林の中や土の中に大きな巣をつくる',
@@ -199,6 +206,7 @@ export const UNITS = {
     canCapture: false,
     vision: 5,
     motion: 'catch', // 戦闘アニメの型（battle.js）
+    bodyMm: 100, // 実物のおおよその体長(mm)。戦闘画面の 大きさ比べに つかう
     bio: {
       size: '体長 9〜11cm くらい（日本さいだいのトンボ）',
       where: 'きれいな小川や わき水のあるところ',

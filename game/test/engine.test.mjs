@@ -93,6 +93,32 @@ test('どの飛行ユニットも 地上ユニット だけでは たおせな�
   }
 });
 
+test('すべての虫に 本物の 体長（bodyMm）が ついている', () => {
+  // 戦闘画面の 大きさ比べは この数字だけで 決まる。
+  // 実機テストで「アリより カブトムシが 小さい」と 言われたのが これの もれ。
+  // 虫を 足すときは かならず 実物の 体長を 書くこと。
+  for (const [id, u] of Object.entries(UNITS)) {
+    assert.equal(typeof u.bodyMm, 'number', `${u.name} に bodyMm が ない`);
+    assert.ok(u.bodyMm > 0 && u.bodyMm <= 200, `${id}: bodyMm ${u.bodyMm} は ありえない`);
+  }
+});
+
+test('体長の 大小が 生きものとして 正しい', () => {
+  // 図かんの 数字が 入れかわると、戦闘画面で アリが カブトムシより 大きく なる。
+  const bigger = [
+    ['kabuto', 'ant'],
+    ['kuwagata', 'kabuto'],
+    ['mantis', 'hornet'],
+    ['dragonfly', 'ladybug'],
+  ];
+  for (const [big, small] of bigger) {
+    assert.ok(
+      UNITS[big].bodyMm > UNITS[small].bodyMm,
+      `${UNITS[big].name}(${UNITS[big].bodyMm}mm) が ${UNITS[small].name}(${UNITS[small].bodyMm}mm) より 小さい`
+    );
+  }
+});
+
 console.log('\n== チュートリアルの やさしさ ==');
 // 実機テストで「1面が難しすぎて先に進めない」と言われた。
 // AI同士で戦わせたら 平均18ターン・勝率33% という、初心者向けでない難度だった。

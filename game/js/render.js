@@ -15,6 +15,36 @@ import { hpBars, key, CAPTURE_POINTS } from './engine.js';
 // 絵が まだ ない虫は 絵文字のまま なので、1体ずつ 順に 差しかえていける。
 // （存在しないファイルを 決め打ちで 取りにいくと、毎回 404 が 出て じゃまなので manifest 方式にした）
 const sprites = new Map();
+// 絵の中で、虫が じっさいに 占めている 割合（余白を のぞいた ぶん）。
+// これを 知らないと、余白の ぶんだけ 虫が 小さく 見えてしまう。
+const spriteFill = new Map();
+
+// 読みこんだ絵の 中身（不透明な部分）が どれだけ あるかを はかる
+function measureFill(img) {
+  try {
+    const c = document.createElement('canvas');
+    c.width = img.naturalWidth || img.width;
+    c.height = img.naturalHeight || img.height;
+    const x = c.getContext('2d', { willReadFrequently: true });
+    x.drawImage(img, 0, 0);
+    const { data } = x.getImageData(0, 0, c.width, c.height);
+    let minX = c.width, minY = c.height, maxX = -1, maxY = -1;
+    for (let y = 0; y < c.height; y++) {
+      for (let px = 0; px < c.width; px++) {
+        if (data[(y * c.width + px) * 4 + 3] > 16) {
+          if (px < minX) minX = px;
+          if (px > maxX) maxX = px;
+          if (y < minY) minY = y;
+          if (y > maxY) maxY = y;
+        }
+      }
+    }
+    if (maxX < 0) return 1;
+    return Math.max((maxX - minX + 1) / c.width, (maxY - minY + 1) / c.height);
+  } catch {
+    return 1; // はかれなくても ゲームは 動く
+  }
+}
 
 export async function loadSprites(basePath = 'assets/units') {
   let ids = [];
@@ -38,6 +68,7 @@ export async function loadSprites(basePath = 'assets/units') {
           const img = new Image();
           img.onload = () => {
             sprites.set(id, img);
+            spriteFill.set(id, measureFill(img));
             resolve({ id, ok: true });
           };
           img.onerror = () => {
@@ -57,6 +88,11 @@ export function hasSprite(id) {
 // 戦闘シーン（battle.js）からも 同じ絵を つかうための 取り出し口
 export function getSprite(id) {
   return sprites.get(id) || null;
+}
+
+// 絵の中で 虫が 占めている 割合。1 に近いほど 余白が 少ない。
+export function getSpriteFill(id) {
+  return spriteFill.get(id) || 1;
 }
 
 export const TEAM_COLOR = {

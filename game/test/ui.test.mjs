@@ -71,8 +71,14 @@ await shot(page, '03-game');
 await page.evaluate(() => window.__e2e.startStage('w1s3'));
 await page.waitForTimeout(600);
 
+// バランス調整で 面の 虫の数は 変わる。数字を 直書きすると そのたびに 落ちるので、
+// マップデータから 数える。
+const startUnits = await page.evaluate(async () => {
+  const { getMap } = await import('../js/data/maps.js');
+  return getMap('w1s3').units.length;
+});
 let s = await state();
-check('盤面に ユニットが 配置される', s.units.length === 6, `${s.units.length}体`);
+check('盤面に ユニットが 配置される', s.units.length === startUnits, `${s.units.length}体／データは ${startUnits}体`);
 check('プレイヤーのターンで はじまる', s.turnTeam === 'player');
 
 console.log('\n== 動かす ==');
@@ -252,7 +258,7 @@ if (nest) {
   await page.locator('.produce-item:not([disabled])').first().click();
   await page.waitForTimeout(300);
   s = await state();
-  check('虫が うまれる', s.units.length > 6, `${s.units.length}体`);
+  check('虫が うまれる', s.units.length > startUnits, `${s.units.length}体（はじめは ${startUnits}体）`);
   check('お金が へる', s.funds.player < fundsBefore, `${fundsBefore} → ${s.funds.player}`);
   const born = s.units.find((u) => u.x === nest.x && u.y === nest.y);
   check('うまれた ターンは 動けない', born?.acted === true);

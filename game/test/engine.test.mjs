@@ -205,6 +205,54 @@ test('1面は プレイヤーが ほぼ 負けない', () => {
   assert.equal(lost, 0, `20回中 ${lost}回 負けた`);
 });
 
+test('どの面も 一方的に ならない', () => {
+  // 実機テストで「1面が難しすぎる」、あとで「かんたんすぎる」と 両方 言われた。
+  // 面を 足したり 数字を いじったりすると、気づかないうちに
+  // 「あおが ぜったい 勝てない／ぜったい 負けない」面が できる。
+  //
+  // AI どうしの 勝率は 人が 遊んだときの 手ごたえと 同じでは ないが、
+  // 0% と 100% は はっきり おかしい。そこだけを しばる。
+  // くわしい 数字は node scripts/measure-stages.mjs で 見る。
+  const RUNS = 8;
+  for (const map of MAPS) {
+    const isTutorial = map.world === 1 && map.stage <= 2;
+    if (isTutorial) continue; // 1〜2面は わざと 勝つように してある
+
+    let wins = 0;
+    let decided = 0;
+    for (let i = 0; i < RUNS; i++) {
+      const g = new Game(map);
+      const red = new AI(g, map.aiLevel || 1);
+      const blue = new AI(g, map.aiLevel || 1);
+      blue.team = 'player';
+      for (let t = 0; t < 60 && g.status === 'playing'; t++) {
+        const actor = g.turnTeam === 'enemy' ? red : blue;
+        let guard = 0;
+        while (actor.takeOneAction() && guard++ < 300);
+        actor.produce();
+        if (g.status !== 'playing') break;
+        g.endTurn();
+      }
+      if (g.status !== 'playing') decided++;
+      if (g.status === 'win') wins++;
+    }
+    assert.ok(decided >= RUNS * 0.6, `${map.id}: ${RUNS}回中 ${decided}回しか 決着しない`);
+    assert.ok(wins > 0, `${map.id}: あおが 一度も 勝てない`);
+    assert.ok(wins < RUNS, `${map.id}: あおが 一度も 負けない`);
+  }
+});
+
+test('世界1が 10面 そろっている', () => {
+  const world1 = MAPS.filter((m) => m.world === 1).map((m) => m.stage).sort((a, b) => a - b);
+  assert.deepEqual(world1, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], `いまの面: ${world1.join(',')}`);
+});
+
+test('面の id と 世界・面ばんごうが 合っている', () => {
+  for (const map of MAPS) {
+    assert.equal(map.id, `w${map.world}s${map.stage}`, `${map.id} は w${map.world}s${map.stage} のはず`);
+  }
+});
+
 console.log('\n== 寄生 ==');
 // PLAN.md §3.3.4 の「安全そうち」を そのまま テストに する。
 // 寄生は 設計を まちがえると ゲームを こわす。歯どめが 消えていないかを 毎回 見る。

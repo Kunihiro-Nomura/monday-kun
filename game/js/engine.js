@@ -19,6 +19,10 @@ const ZOMBIE_DECAY = HP_BAR;
 
 let nextUnitId = 1;
 
+// 中断セーブの かたちの 版。かたちを 変えたら 1つ ふやす。
+// 数が ちがう セーブは 読まずに すてる（半分だけ もどるより、はじめから のほうがよい）。
+export const SAVE_VERSION = 1;
+
 export function hpBars(hp100) {
   return Math.max(0, Math.ceil(hp100 / 10));
 }
@@ -585,6 +589,69 @@ export class Game {
 
   hasActionsLeft(team) {
     return this.unitsOf(team).some((u) => !u.acted);
+  }
+
+  // ---- 中断セーブ ----
+  //
+  // 遊んでいる とちゅうの ばんめんを まるごと 書きだす。
+  // 子どもは 気が むいたときに やめる。ターンの まん中で 電車を おりることもある。
+  // そこで「つづきから」を 出せるように、盤の じょうたいを そのまま のこす。
+  //
+  // 地形・マップの 形は mapData から また つくれるので、書きださない。
+  // **変わりうるものだけ** を のこす。マップを あとから 直したときに、
+  // 古いセーブが 古い地形を つれてこないようにするため。
+  toSave() {
+    return {
+      v: SAVE_VERSION,
+      mapId: this.mapData.id,
+      difficulty: this.difficulty.id,
+      funds: { ...this.funds },
+      turnTeam: this.turnTeam,
+      turnCount: this.turnCount,
+      status: this.status,
+      // 占領できる地形の もちぬしと 占領の しんちょく
+      props: [...this.props.values()].map((p) => [p.x, p.y, p.team, p.capture, p.capturedBy]),
+      units: this.units.map((u) => ({ ...u, parasite: u.parasite ? { ...u.parasite } : null })),
+      log: this.log.slice(-30),
+    };
+  }
+
+  // 書きだした ばんめんを もどす。
+  // mapData は 呼ぶ側が わたす（セーブに 地形を 入れていないため）。
+  // セーブが 古い・こわれている ときは null を かえす。読めないものを
+  // むりに 読むと、盤が 半分だけ もどった 状態で 遊べてしまう。
+  static fromSave(save, mapData) {
+    if (!save || save.v !== SAVE_VERSION || !mapData || save.mapId !== mapData.id) return null;
+
+    let game;
+    try {
+      game = new Game(mapData, { difficulty: save.difficulty });
+    } catch {
+      return null;
+    }
+
+    // 盤の 形が セーブと 合っているか。マップを 直したあとの 古いセーブを はじく。
+    if (save.props.length !== game.props.size) return null;
+    for (const [x, y] of save.props) {
+      if (!game.props.has(key(x, y))) return null;
+    }
+    if (save.units.some((u) => !UNITS[u.type] || !game.inBounds(u.x, u.y))) return null;
+
+    for (const [x, y, team, capture, capturedBy] of save.props) {
+      Object.assign(game.props.get(key(x, y)), { team, capture, capturedBy });
+    }
+    game.units = save.units.map((u) => ({ ...u, parasite: u.parasite ? { ...u.parasite } : null }));
+    game.funds = { ...save.funds };
+    game.turnTeam = save.turnTeam;
+    game.turnCount = save.turnCount;
+    game.status = save.status;
+    game.log = [...(save.log || [])];
+
+    // つぎに つくる虫の 番号を、もどした虫と ぶつからない ところまで すすめる。
+    // ここを わすれると、生産した虫が 既にいる虫と 同じ id を もってしまう。
+    for (const u of game.units) if (u.id >= nextUnitId) nextUnitId = u.id + 1;
+
+    return game;
   }
 
   checkVictory() {

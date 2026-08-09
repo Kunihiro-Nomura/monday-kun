@@ -102,6 +102,19 @@ html, body {
   border: 2px solid #3d5133;
 }
 .stage-card.locked { opacity: 0.45; }
+/* いちばん上の「つづきから」。さがさなくても 目に入るように、色で 立たせる。
+   面では ないので stage-card とは 別の class に してある */
+.resume-card {
+  background: #3a5a2c;
+  border: 2px solid #7fc45f;
+  border-radius: 14px;
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 4px;
+}
+.resume-card .stage-no { background: #7fc45f; color: #17250f; }
 .stage-no {
   width: 46px; height: 46px; flex: 0 0 auto;
   border-radius: 50%;

@@ -35,6 +35,11 @@ jobs:
       - name: ルールの単体テスト
         run: node game/test/engine.test.mjs
 
+      # scripts/ を さわると art.yml も 動くが、こちらでも 通しておく。
+      # 検査を ゆるめる 変更が 黙って 入らないようにするため。
+      - name: 受け入れ検査そのものの テスト
+        run: node scripts/check-assets.test.mjs
+
       # 一方的な面が できていないか、数字で 見せる（落ちはしない・目で 見るため）
       - name: ステージの むずかしさ
         run: node scripts/measure-stages.mjs

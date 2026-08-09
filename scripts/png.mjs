@@ -2,12 +2,12 @@
 // 昆虫戦争 (Konchu Senso) — 無断複製・改変・再配布を禁じます。詳細は /LICENSE を参照。
 
 // ちいさな PNG デコーダ。
-// 受け入れ検査（透過・占有率・余白）のために アルファ値だけ 読めればよいので、
+// 受け入れ検査（透過・占有率・余白・色かぶり）のために 使う。
 // 外部ライブラリは 使わない（グラフィック担当の環境に 何が入っているか わからないため）。
 // 8ビット / 非インターレース の PNG に 対応する。
 
 import { readFileSync } from 'node:fs';
-import { inflateSync } from 'node:zlib';
+import { inflateSync, deflateSync } from 'node:zlib';
 
 const CHANNELS = { 0: 1, 2: 3, 3: 1, 4: 2, 6: 4 };
 
@@ -56,6 +56,7 @@ export function decodePng(path) {
     // 色タイプ 4/6 は アルファつき。3（パレット）は tRNS があれば 透過できる
     hasAlphaChannel: ihdr.colorType === 4 || ihdr.colorType === 6 || (ihdr.colorType === 3 && !!trns),
     alpha: null,
+    rgb: null,
     decodable: false,
   };
 
@@ -96,13 +97,28 @@ export function decodePng(path) {
     }
   }
 
-  // アルファだけ 取り出す
-  const alpha = new Uint8Array(ihdr.width * ihdr.height);
-  for (let i = 0; i < alpha.length; i++) {
+  // アルファと 色を 取り出す
+  const count = ihdr.width * ihdr.height;
+  const alpha = new Uint8Array(count);
+  const rgb = new Uint8Array(count * 3);
+  const gray = ch === 2; // 色タイプ4 は グレー＋アルファ
+
+  for (let i = 0; i < count; i++) {
     alpha[i] = out[i * ch + (ch - 1)];
+    if (gray) {
+      const v = out[i * ch];
+      rgb[i * 3] = v;
+      rgb[i * 3 + 1] = v;
+      rgb[i * 3 + 2] = v;
+    } else {
+      rgb[i * 3] = out[i * ch];
+      rgb[i * 3 + 1] = out[i * ch + 1];
+      rgb[i * 3 + 2] = out[i * ch + 2];
+    }
   }
 
   result.alpha = alpha;
+  result.rgb = rgb;
   result.decodable = true;
   return result;
 }
@@ -138,4 +154,122 @@ export function contentBounds(png, threshold = 16) {
 
   if (maxX < 0) return null;
   return { minX, minY, maxX, maxY, width: maxX - minX + 1, height: maxY - minY + 1 };
+}
+
+// 生成に つかった 背景色が 絵に 残っていないかを 見る（色かぶり／green spill）。
+//
+// つやのある 暗い色の 虫を 緑の 背景で 作ると、上翅に 緑が 映りこんで オリーブ色に にごる。
+// カブトムシの 初回納品が これで 作り直しに なった。目で 見て 気づける 濁りでは ないので、
+// 数字で 出す。
+//
+// 見かたは 2つ:
+//   1. 背景色 そのものが 残っている（切り抜きもれ）→ 背景色に とても 近い画素がある
+//   2. 絵の 広い範囲が 背景色に 寄っている（色かぶり）→ 寄った画素の 割合が 多い
+//
+// 「背景色への 寄りぐあい」は チャンネルの 差で 測る。緑背景なら g-max(r,b)、
+// マゼンタ背景なら min(r,b)-g。カマキリのように 体そのものが 緑の 虫は
+// 背景に マゼンタを 使う 決まりなので、地の色を 誤検出しない。
+//
+// この測り方に しているのは、「ふちの色を 内側と くらべる」やり方だと
+// **濃い輪郭線を 色かぶりと まちがえる** から。輪郭は 黒に 近く（寄りぐあい≒0）、
+// 赤褐色の 体（≒-59）より 数字が 高く 出てしまう。輪郭線は 仕様で 要求している
+// ものなので、それを 落とす検査に しては いけない。
+export function backgroundSpill(png, hex, alphaThreshold = 16) {
+  if (!png.rgb || !png.alpha) return null;
+
+  const bg = hexToRgb(hex);
+  if (!bg) return null;
+
+  // 背景色の どのチャンネルが 立っているか（#00FF00 なら 緑、#FF00FF なら 赤と青）
+  const high = [];
+  const low = [];
+  ['r', 'g', 'b'].forEach((_, i) => (bg[i] >= 128 ? high : low).push(i));
+  if (!high.length || !low.length) return null; // 白・黒の背景は この測り方が できない
+
+  const { width, height, alpha, rgb } = png;
+  const signature = (i) => {
+    let hi = 255;
+    let lo = 0;
+    for (const c of high) hi = Math.min(hi, rgb[i * 3 + c]);
+    for (const c of low) lo = Math.max(lo, rgb[i * 3 + c]);
+    return hi - lo;
+  };
+
+  let visible = 0;
+  let strong = 0; // 背景色 そのもの（切り抜きもれ）
+  let tinted = 0; // 背景色に 寄っている（にごり）
+
+  for (let i = 0; i < width * height; i++) {
+    if (alpha[i] <= alphaThreshold) continue;
+    visible++;
+    const s = signature(i);
+    if (s > STRONG) strong++;
+    if (s >= TINTED) tinted++;
+  }
+
+  if (!visible) return null;
+  return { visible, strong, tinted, tintedRatio: tinted / visible };
+}
+
+// 背景色 そのものと 言える 寄りぐあい。純粋な #00FF00 は 255。
+// 100 は 「背景が 半分ほど 混ざった 画素」にあたる。
+const STRONG = 100;
+// 「背景色に 寄っている」と 数える 下限。
+// 実際に 起きた オリーブ色の にごりは、チャンネル差で +10 ほどしか ない。
+// 一方 黒に 近い 輪郭線・灰色・黄色は 0 以下なので、8 なら 巻きこまない。
+const TINTED = 8;
+
+export function hexToRgb(hex) {
+  const m = /^#?([0-9a-f]{6})$/i.exec(String(hex).trim());
+  if (!m) return null;
+  const n = parseInt(m[1], 16);
+  return [(n >> 16) & 0xff, (n >> 8) & 0xff, n & 0xff];
+}
+
+// テストで 検査そのものを 検査するために つかう ちいさな PNG エンコーダ。
+// rgba は 画素ごとに 4バイト。8ビット RGBA・非インターレースで 書き出す。
+export function encodePng(width, height, rgba) {
+  const stride = width * 4;
+  const raw = Buffer.alloc((stride + 1) * height);
+  for (let y = 0; y < height; y++) {
+    raw[y * (stride + 1)] = 0; // フィルタなし
+    Buffer.from(rgba.buffer ?? rgba, y * stride, stride).copy(raw, y * (stride + 1) + 1);
+  }
+
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(width, 0);
+  ihdr.writeUInt32BE(height, 4);
+  ihdr[8] = 8; // bitDepth
+  ihdr[9] = 6; // colorType RGBA
+
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunk('IHDR', ihdr),
+    chunk('IDAT', deflateSync(raw)),
+    chunk('IEND', Buffer.alloc(0)),
+  ]);
+}
+
+function chunk(type, data) {
+  const out = Buffer.alloc(8 + data.length + 4);
+  out.writeUInt32BE(data.length, 0);
+  out.write(type, 4, 'ascii');
+  data.copy(out, 8);
+  out.writeUInt32BE(crc32(out.subarray(4, 8 + data.length)), 8 + data.length);
+  return out;
+}
+
+let crcTable = null;
+function crc32(buf) {
+  if (!crcTable) {
+    crcTable = new Int32Array(256);
+    for (let n = 0; n < 256; n++) {
+      let c = n;
+      for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+      crcTable[n] = c;
+    }
+  }
+  let c = -1;
+  for (let i = 0; i < buf.length; i++) c = crcTable[(c ^ buf[i]) & 0xff] ^ (c >>> 8);
+  return (c ^ -1) >>> 0;
 }

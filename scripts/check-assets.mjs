@@ -9,7 +9,7 @@
 
 import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { decodePng, contentBounds } from './png.mjs';
+import { decodePng, contentBounds, backgroundSpill } from './png.mjs';
 
 const ROOT = new URL('..', import.meta.url).pathname;
 const UNITS_DIR = join(ROOT, 'game/assets/units');
@@ -20,6 +20,13 @@ const byId = new Map(orders.orders.map((o) => [o.id, o]));
 const CANVAS = orders.common.canvas;
 const MIN_MARGIN = orders.common.minMargin;
 const OCCUPANCY_TOLERANCE = 0.05;
+// 背景色に 寄った画素が どれだけ あったら 落とすか（色かぶり）。
+// 承認ずみの kabuto.png が 4.6% なので、そこから 十分に 離してある。
+// 体ぜんたいが にごった 絵は 90% を こえるので、あいだは 広い。
+// 見本が 1枚しか ないので、**落とす線は ゆるく、知らせる線は きびしく** している。
+// まちがって 落として 納品を 止めるより、数字を 出して 人が 見るほうが 損が 小さい。
+const SPILL_WARN_RATIO = 0.12;
+const SPILL_FAIL_RATIO = 0.3;
 
 let errors = 0;
 let warnings = 0;
@@ -123,6 +130,29 @@ for (const file of files.sort()) {
       `占有率が ${(occupancy * 100).toFixed(0)}%（指定は ${(order.occupancy * 100).toFixed(0)}%±${OCCUPANCY_TOLERANCE * 100}）。` +
         (diff > 0 ? '大きすぎます' : '小さすぎます')
     );
+  }
+
+  // 6. 色かぶり（生成に つかった 背景色が 絵に 残っていないか）
+  //    カブトムシの 初回納品が これで 作り直しに なった。目で 気づきにくいので 数字で 見る。
+  const bgHex = orders.common.backgrounds[order.background];
+  const spill = bgHex ? backgroundSpill(png, bgHex) : null;
+  if (spill) {
+    const bgName = order.background === 'magenta' ? 'マゼンタ' : 'グリーン';
+    const pct = (spill.tintedRatio * 100).toFixed(1);
+    if (spill.strong > 0) {
+      fail(
+        id,
+        `${bgName}の背景が ${spill.strong}画素 そのまま 残っています（切り抜きもれ）。背景を きれいに 抜いてください`
+      );
+    } else if (spill.tintedRatio > SPILL_FAIL_RATIO) {
+      fail(
+        id,
+        `絵の ${pct}% が ${bgName}に にごっています（色かぶり）。` +
+          '背景色の 映りこみを 取りのぞくか、生成時点で 透過PNGを 直接 出力してください'
+      );
+    } else if (spill.tintedRatio > SPILL_WARN_RATIO) {
+      warn(id, `${bgName}寄りの画素が ${pct}% あります（色かぶりの 気配）。実物の色から ずれていないか 見てください`);
+    }
   }
 
   if (!lines.some((l) => l.includes(`${id}:`) && l.startsWith('  NG'))) {

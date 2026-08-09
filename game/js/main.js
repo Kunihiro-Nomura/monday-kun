@@ -16,6 +16,7 @@ import { DIFFICULTY_LIST, DEFAULT_DIFFICULTY, getDifficulty } from './data/diffi
 const SAVE_KEY = 'konchu-senso/progress/v1';
 const ZUKAN_KEY = 'konchu-senso/zukan/v1';
 const DIFFICULTY_KEY = 'konchu-senso/difficulty/v1';
+const RESUME_KEY = 'konchu-senso/inprogress/v1';
 
 // ---- セーブデータ ----
 // Safari は ストレージを 消すことがあるので、こわれていても 落ちないようにしておく。
@@ -50,6 +51,33 @@ function currentDifficulty() {
 function setDifficulty(id) {
   difficultyId = getDifficulty(id).id;
   saveJSON(DIFFICULTY_KEY, difficultyId);
+}
+
+// ---- 中断セーブ ----
+// 子どもは 気が むいたときに やめる。ターンの まん中で 電車を おりることもある。
+// 「あそんでいた ばんめん」を 1つだけ おぼえておいて、つぎに ひらいたとき つづきから 出す。
+//
+// おぼえるのは 1面ぶんだけ。いくつも たまると、どれが 最後か 子どもには わからない。
+function loadResume() {
+  const raw = loadJSON(RESUME_KEY, null);
+  if (!raw || !raw.save) return null;
+  const map = MAPS.find((m) => m.id === raw.save.mapId);
+  if (!map) return null;
+  return { map, save: raw.save };
+}
+
+function saveResume() {
+  // しょうはい が ついた ばんめんは のこさない。もどっても やることが ない。
+  if (!game || !currentMap || game.status !== 'playing') return;
+  saveJSON(RESUME_KEY, { save: game.toSave() });
+}
+
+function clearResume() {
+  try {
+    localStorage.removeItem(RESUME_KEY);
+  } catch {
+    /* 消せなくても 遊べるようにする */
+  }
 }
 
 function discover(types) {
@@ -149,6 +177,25 @@ function isUnlocked(index) {
 function renderStageList() {
   const list = document.getElementById('stage-list');
   list.innerHTML = '';
+
+  // とちゅうの ばんめんが あれば、いちばん上に 大きく 出す。
+  // 子どもが さがさなくても 見つかる ところに 置く。
+  const resume = loadResume();
+  if (resume) {
+    // class は stage-card と 分けてある。これは 面では なく「もどる ボタン」なので、
+    // 面を かぞえる ところ（ロックの 数など）に まざると こまる。
+    const card = document.createElement('div');
+    card.className = 'resume-card';
+    card.innerHTML = `
+      <div class="stage-no">▶</div>
+      <div class="stage-body">
+        <div class="stage-name">つづきから</div>
+        <div class="stage-hint">せかい${resume.map.world}-${resume.map.stage}「${resume.map.name}」 ${resume.save.turnCount}ターンめ</div>
+      </div>`;
+    card.addEventListener('click', () => startStage(resume.map.id, resume));
+    list.appendChild(card);
+  }
+
   MAPS.forEach((map, i) => {
     const unlocked = isUnlocked(i);
     const cleared = progress.cleared[map.id];
@@ -181,7 +228,26 @@ function renderStageList() {
         <div class="stage-hint">${unlocked ? map.hint : 'まえの ステージを クリアすると あそべるよ'}</div>
         ${cleared ? `<div class="stage-badge">クリア！ ${cleared.turns}ターン（${getDifficulty(cleared.difficulty).name}）</div>` : ''}
       </div>`;
-    if (unlocked) card.addEventListener('click', () => startStage(map.id));
+    if (unlocked) {
+      card.addEventListener('click', () => {
+        // その面の とちゅうが のこっているのに はじめから 押されたら、一度 たしかめる。
+        // だまって 消すと、さっきまでの たたかいが 音もなく 消えてしまう。
+        if (resume && resume.map.id === map.id) {
+          openModal(
+            `<h2>${map.name}</h2>
+             <p>とちゅうまで あそんだ ばんめんが のこっているよ（${resume.save.turnCount}ターンめ）。</p>
+             <p>はじめから やると、その ばんめんは きえます。</p>`,
+            [
+              { label: 'つづきから', onClick: () => startStage(map.id, resume) },
+              { label: 'はじめから', className: 'danger', onClick: () => startStage(map.id) },
+              { label: 'やめる', className: 'ghost' },
+            ]
+          );
+          return;
+        }
+        startStage(map.id);
+      });
+    }
     list.appendChild(card);
   });
 }
@@ -215,11 +281,19 @@ function playBattle(attacker, defender, before, result) {
 // ai: 敵のターン中 / over: しょうはい が ついた
 let ui = { mode: 'idle', unit: null, origin: null, moved: false, targets: [] };
 
-function startStage(mapId) {
+// resume … loadResume() の 中身。わたすと その ばんめんから はじめる。
+function startStage(mapId, resume = null) {
   currentMap = getMap(mapId);
+
+  // つづきから の ときは、書きだした ばんめんを もどす。
+  // 読めなければ（マップを 直した あとなど）だまって はじめから にする。
+  // 半分だけ もどった 盤で 遊ばせるより、そのほうが 害が 小さい。
+  game = resume ? Game.fromSave(resume.save, currentMap) : null;
+  const resumed = !!game;
+
   // むずかしさは 面が はじまる ときに かたまる。
   // 遊んでいる とちゅうで 数値が 変わると、たてた さくせんが くずれてしまう。
-  game = new Game(currentMap, { difficulty: difficultyId });
+  if (!game) game = new Game(currentMap, { difficulty: difficultyId });
   ai = new AI(game, currentMap.aiLevel || 1);
   ui = { mode: 'idle', unit: null, origin: null, moved: false, targets: [] };
 
@@ -227,13 +301,25 @@ function startStage(mapId) {
   else renderer.setGame(game);
 
   discover(game.units.map((u) => u.type));
-  game.startTurn('player');
+
+  // もどした ときは ターンの とちゅうなので、startTurn を もう一度 かけない。
+  // かけると 収入が 二重に 入り、行動ずみが 取りけされてしまう。
+  if (!resumed) game.startTurn('player');
 
   show('game');
-  startTutorial(currentMap);
-  setBanner(`せかい${currentMap.world}-${currentMap.stage}　${currentMap.name}（${game.difficulty.name}）`, 2200);
+  if (!resumed) startTutorial(currentMap);
+  setBanner(
+    resumed
+      ? `つづきから　せかい${currentMap.world}-${currentMap.stage}　${game.turnCount}ターンめ`
+      : `せかい${currentMap.world}-${currentMap.stage}　${currentMap.name}（${game.difficulty.name}）`,
+    2200
+  );
   setTileInfo(currentMap.hint);
   refresh();
+  saveResume();
+
+  // もどした ばんめんが あかチームの ターンだったら、そこから 動かす。
+  if (resumed && game.turnTeam === 'enemy' && game.status === 'playing') runAITurn();
 }
 
 function refresh() {
@@ -553,6 +639,8 @@ function finishAction() {
   ui = { mode: 'idle', unit: null, origin: null, moved: false, targets: [] };
   hideActionMenu();
   refresh();
+  // 1手ごとに おぼえる。とちゅうで 電池が きれても、その1手 前まで もどれる。
+  saveResume();
   checkGameOver();
 }
 
@@ -709,9 +797,16 @@ document.getElementById('btn-quit').addEventListener('click', () => {
     `<h2>せってい</h2><p><b>たたかいの アニメ</b></p>${options}
      <p style="margin-top:14px"><b>むずかしさ</b>　いまは「${game.difficulty.name}」</p>${levels}
      <p style="font-size:12px;color:#aebba6;margin-top:6px">かえると つぎの ステージから きりかわるよ。</p>
-     <p style="margin-top:14px">ゲームを やめると、とちゅうの たたかいは きえてしまうよ。</p>`,
+     <p style="margin-top:14px">やめても、いまの たたかいは のこるよ。つぎに ひらいたら「つづきから」で もどれます。</p>`,
     [
-      { label: 'ゲームを やめる', className: 'danger', onClick: () => show('stages') },
+      {
+        label: 'ゲームを やめる',
+        className: 'danger',
+        onClick: () => {
+          saveResume();
+          show('stages');
+        },
+      },
       { label: 'つづける', className: 'ghost' },
     ]
   );
@@ -803,6 +898,9 @@ async function runAITurn() {
   fireTutorial('playerTurn');
   setTileInfo('虫を タップして えらぼう');
   refresh();
+  // 自分の ターンの あたまで おぼえる。あかチームの 演出の とちゅうで やめても、
+  // つぎに ひらいたとき ここから はじまる。
+  saveResume();
 }
 
 function isOffScreen(x, y) {
@@ -818,6 +916,9 @@ function checkGameOver() {
   ui.mode = 'over';
   hideActionMenu();
   renderer.draw();
+  // しょうはい が ついたら とちゅうの ばんめんは 用ずみ。
+  // のこすと「つづきから」を 押したのに 終わった盤が 出てしまう。
+  clearResume();
 
   if (status === 'win') {
     const record = progress.cleared[currentMap.id];
@@ -935,6 +1036,16 @@ if ('serviceWorker' in navigator) {
   });
 }
 
+// ホーム画面に もどす・タブを 切りかえる・電話が かかってくる。
+// iPhone は そのまま アプリを 終わらせることが あるので、見えなくなった しゅんかんに おぼえる。
+// pagehide も 見るのは、visibilitychange が 来ないまま 終わる ことが あるため。
+for (const event of ['visibilitychange', 'pagehide']) {
+  window.addEventListener(event, () => {
+    if (event === 'visibilitychange' && document.visibilityState !== 'hidden') return;
+    saveResume();
+  });
+}
+
 // 自動UIテスト（test/ui.test.mjs）から 盤面を のぞくための 入り口。
 // ?e2e=1 が ついたときだけ 出すので、ふつうに あそぶときには 存在しない。
 if (new URLSearchParams(location.search).has('e2e')) {
@@ -946,6 +1057,9 @@ if (new URLSearchParams(location.search).has('e2e')) {
     show,
     startStage,
     setDifficulty,
+    saveResume,
+    clearResume,
+    loadResume,
   };
 }
 

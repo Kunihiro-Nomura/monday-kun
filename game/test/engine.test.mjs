@@ -844,6 +844,105 @@ test('自分の 虫が いなくなると はいぼく', () => {
   assert.equal(g.checkVictory(), 'lose');
 });
 
+console.log('\n== 中断セーブ ==');
+
+test('とちゅうの ばんめんを 書きだして もどせる', () => {
+  const g = new Game(map1, { difficulty: 'normal' });
+  const ant = g.unitsOf('player').find((u) => u.type === 'ant');
+  const sap = [...g.props.values()].find((p) => g.terrainIdAt(p.x, p.y) === 'sap');
+
+  // 遊んだ あとの、まん中の じょうたいを つくる
+  ant.x = sap.x;
+  ant.y = sap.y;
+  g.capture(ant);
+  ant.acted = true;
+  ant.hp = 63;
+  g.funds.player = 4321;
+  g.turnCount = 7;
+
+  const back = Game.fromSave(g.toSave(), map1);
+  assert.ok(back, 'もどせなかった');
+
+  const restored = back.units.find((u) => u.id === ant.id);
+  assert.equal(restored.hp, 63, 'HPが もどっていない');
+  assert.equal(restored.acted, true, '行動ずみが もどっていない');
+  assert.equal(restored.x, sap.x, '位置が もどっていない');
+  assert.equal(back.propAt(sap.x, sap.y).capture, g.propAt(sap.x, sap.y).capture, '占領の しんちょくが もどっていない');
+  assert.equal(back.funds.player, 4321, 'お金が もどっていない');
+  assert.equal(back.turnCount, 7, 'ターン数が もどっていない');
+  assert.equal(back.difficulty.id, 'normal', 'むずかしさが もどっていない');
+});
+
+test('とりつかれた じょうたいも もどる', () => {
+  const g = new Game(map1);
+  const target = g.unitsOf('player')[0];
+  target.parasite = { type: 'komayubachi', kind: 'weaken', turnsLeft: 2 };
+  target.zombie = true;
+
+  const back = Game.fromSave(g.toSave(), map1);
+  const restored = back.units.find((u) => u.id === target.id);
+  assert.deepEqual(restored.parasite, { type: 'komayubachi', kind: 'weaken', turnsLeft: 2 });
+  assert.equal(restored.zombie, true);
+});
+
+test('もどした ばんめんは、書きだす前と 同じ 中身になる', () => {
+  const g = new Game(map1);
+  g.units[0].hp = 42;
+  g.funds.enemy = 999;
+  const once = g.toSave();
+  const twice = Game.fromSave(once, map1).toSave();
+  assert.deepEqual(twice, once, 'もどして 書きだすと 中身が 変わってしまう');
+});
+
+test('もどした あとに つくる虫の 番号が ぶつからない', () => {
+  // ここを わすれると、生産した虫が すでにいる虫と 同じ id を もち、
+  // 「えらんだ虫と ちがう虫が 動く」が 起きる。
+  const g = new Game(map1);
+  const back = Game.fromSave(g.toSave(), map1);
+  const made = back.makeUnit('ant', 'player', 0, 0);
+  assert.ok(
+    back.units.every((u) => u.id !== made.id),
+    `つくった虫の id ${made.id} が すでにいる虫と ぶつかっている`
+  );
+});
+
+test('版が ちがう セーブは 読まない', () => {
+  const g = new Game(map1);
+  const save = g.toSave();
+  save.v = 999;
+  assert.equal(Game.fromSave(save, map1), null, '知らない版を 読んでしまった');
+});
+
+test('ちがうマップの セーブは 読まない', () => {
+  const g = new Game(map1);
+  const other = MAPS.find((m) => m.id !== map1.id);
+  assert.equal(Game.fromSave(g.toSave(), other), null, 'ちがうマップに あてはめてしまった');
+});
+
+test('盤の 形が 合わない セーブは 読まない', () => {
+  // マップを あとから 直したときに 起きること。半分だけ もどるより すてるほうがよい。
+  const g = new Game(map1);
+  const save = g.toSave();
+  save.props = save.props.slice(1);
+  assert.equal(Game.fromSave(save, map1), null, '数が 合わないのに 読んでしまった');
+
+  const save2 = g.toSave();
+  save2.units = [{ ...save2.units[0], x: 999, y: 999 }];
+  assert.equal(Game.fromSave(save2, map1), null, '盤の そとの虫を 読んでしまった');
+});
+
+test('もどした ばんめんから、そのまま 遊びつづけられる', () => {
+  const g = new Game(map1);
+  g.startTurn('player');
+  const back = Game.fromSave(g.toSave(), map1);
+
+  const actor = new AI(back, 1);
+  let guard = 0;
+  back.endTurn();
+  while (actor.takeOneAction() && guard++ < 100);
+  assert.ok(guard > 0, 'もどした ばんめんで AIが 1回も 動けなかった');
+});
+
 console.log('\n== 敵AI ==');
 
 test('AIは 1ターンで すべての虫を 動かす', () => {

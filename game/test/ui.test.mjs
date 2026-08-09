@@ -19,7 +19,9 @@ const shot = async (page, name) => {
   if (OUT) await page.screenshot({ path: `${OUT}/${name}.png` });
 };
 
-const browser = await chromium.launch();
+// CHROMIUM_PATH を わたせば、その Chromium を つかう。
+// 手元に すでに 入っている ブラウザを つかいたいとき用（CI では 空のままでよい）。
+const browser = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {});
 const ctx = await browser.newContext({ ...devices['iPhone 13'], isMobile: true, hasTouch: true });
 const page = await ctx.newPage();
 
@@ -463,6 +465,80 @@ const modalText = modalVisible ? await page.locator('#modal-body').innerText() :
 check('クリア画面が 出る', modalText.includes('クリア'), modalText.split('\n')[0] || 'モーダルなし');
 check('クリア画面に まめちしきが のる', modalText.includes('まめちしき'));
 await shot(page, '10-victory');
+
+console.log('\n== 中断セーブ ==');
+
+// クリアで セーブが 消えることを、いま出ている クリア画面で たしかめる。
+check(
+  'しょうり すると とちゅうの ばんめんは 消える',
+  (await page.evaluate(() => localStorage.getItem('konchu-senso/inprogress/v1'))) === null
+);
+
+// あそんだ とちゅうの ばんめんを つくる。
+await page.evaluate(() => window.__e2e.startStage('w1s1'));
+await page.waitForTimeout(300);
+const marked = await page.evaluate(() => {
+  const g = window.__e2e.game;
+  const u = g.unitsOf('player')[0];
+  u.hp = 55;
+  u.acted = true;
+  g.turnCount = 4;
+  g.funds.player = 1234;
+  window.__e2e.saveResume();
+  return { id: u.id };
+});
+check(
+  'あそんだ とちゅうで セーブが のこる',
+  (await page.evaluate(() => JSON.parse(localStorage.getItem('konchu-senso/inprogress/v1'))?.save?.turnCount)) === 4
+);
+
+// ひらき直す。実機で アプリを 閉じて 開くのと 同じ。
+await page.goto(`${BASE}/index.html?e2e=1`, { waitUntil: 'networkidle' });
+await page.waitForTimeout(300);
+await page.evaluate(() => window.__e2e.show('stages'));
+await page.waitForTimeout(200);
+
+const resumeCard = page.locator('.resume-card');
+check('ステージ一覧の いちばん上に「つづきから」が 出る', (await resumeCard.count()) === 1);
+const resumeText = (await resumeCard.count()) ? await resumeCard.innerText() : '';
+check('何ターンめかが 書いてある', resumeText.includes('4ターンめ'), resumeText.replace(/\n/g, ' / '));
+await shot(page, '11-resume-card');
+
+await resumeCard.click();
+await page.waitForTimeout(400);
+const back = await page.evaluate((id) => {
+  const g = window.__e2e.game;
+  const u = g.units.find((x) => x.id === id);
+  return {
+    onGameScreen: document.getElementById('screen-game').classList.contains('active'),
+    turnCount: g.turnCount,
+    funds: g.funds.player,
+    hp: u?.hp,
+    acted: u?.acted,
+  };
+}, marked.id);
+
+check('ゲーム画面に もどる', back.onGameScreen);
+check('ターン数が もどる', back.turnCount === 4, `${back.turnCount}ターンめ`);
+check('虫の HPと 行動ずみが もどる', back.hp === 55 && back.acted === true, `HP ${back.hp} / 行動ずみ ${back.acted}`);
+// startTurn を 二重に かけると 収入が 入ってしまう。ここが いちばん こわれやすい。
+check('収入が 二重に 入らない', back.funds === 1234, `${back.funds}`);
+await shot(page, '12-resumed');
+
+// こわれた セーブで 落ちないこと。Safari は ストレージを 消したり 壊したり する。
+//
+// さきに ステージ一覧へ もどる。ゲームを ひらいたまま 書きかえても、
+// ページを はなれる ときの 自動セーブが 正しい中身で 上書きして しまうため。
+await page.evaluate(() => window.__e2e.show('stages'));
+await page.goto(`${BASE}/index.html?e2e=1`, { waitUntil: 'networkidle' });
+await page.waitForTimeout(300);
+await page.evaluate(() => localStorage.setItem('konchu-senso/inprogress/v1', '{{ こわれた'));
+await page.goto(`${BASE}/index.html?e2e=1`, { waitUntil: 'networkidle' });
+await page.waitForTimeout(300);
+await page.evaluate(() => window.__e2e.show('stages'));
+await page.waitForTimeout(200);
+check('こわれた セーブでも ステージ一覧は 出る', (await page.locator('.stage-card').count()) > 0);
+check('こわれた セーブから つづきから は 出ない', (await page.locator('.resume-card').count()) === 0);
 
 console.log('\n== JSエラー ==');
 check('コンソールエラーが ない', errors.length === 0, errors.join(' | '));

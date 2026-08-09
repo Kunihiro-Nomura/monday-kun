@@ -12,7 +12,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { decodePng, encodePng, backgroundSpill } from './png.mjs';
+import { decodePng, encodePng, backgroundSpill, contentBlobs, edgeQuality } from './png.mjs';
 
 let passed = 0;
 let failed = 0;
@@ -37,28 +37,40 @@ const MAGENTA = '#FF00FF';
 //   body    … 体の色
 //   outline … 輪郭線の色（仕様で 濃い線を 要求している）
 //   bleed   … 体の まわりに 残した 背景色（切り抜きもれ。null なら 透明）
-function draw({ body, outline = [20, 16, 14], bleed = null }) {
+//   smooth  … ふちに 半透明を 置くか（本物の絵は アンチエイリアスが かかっている）
+//   stray   … 本体から 離れた 欠片 {x0,x1,y0,y1}
+function draw({ body, outline = [20, 16, 14], bleed = null, smooth = true, stray = null }) {
   const rgba = new Uint8Array(SIZE * SIZE * 4);
   const cx = SIZE / 2;
   const cy = SIZE / 2;
   const rBody = SIZE * 0.38;
+  const put = (x, y, color, a = 255) => {
+    const i = (y * SIZE + x) * 4;
+    rgba[i] = color[0];
+    rgba[i + 1] = color[1];
+    rgba[i + 2] = color[2];
+    rgba[i + 3] = a;
+  };
 
   for (let y = 0; y < SIZE; y++) {
     for (let x = 0; x < SIZE; x++) {
-      const i = (y * SIZE + x) * 4;
       const d = Math.hypot(x - cx, y - cy);
+      const outer = bleed ? rBody + 2 : rBody;
 
-      let color = null;
-      if (d <= rBody - 2) color = body;
-      else if (d <= rBody) color = outline; // 濃い輪郭線
-      else if (bleed && d <= rBody + 2) color = bleed; // 抜き残した 背景
-
-      if (color) {
-        rgba[i] = color[0];
-        rgba[i + 1] = color[1];
-        rgba[i + 2] = color[2];
-        rgba[i + 3] = 255;
+      if (d <= rBody - 2) put(x, y, body);
+      else if (d <= rBody) put(x, y, outline); // 濃い輪郭線
+      else if (bleed && d <= rBody + 2) put(x, y, bleed); // 抜き残した 背景
+      else if (smooth && d <= outer + 1.5) {
+        // ふちの 1.5px を 半透明に する
+        const a = Math.round(255 * Math.max(0, 1 - (d - outer) / 1.5));
+        if (a > 0) put(x, y, bleed || outline, a);
       }
+    }
+  }
+
+  if (stray) {
+    for (let y = stray.y0; y <= stray.y1; y++) {
+      for (let x = stray.x0; x <= stray.x1; x++) put(x, y, outline);
     }
   }
   return rgba;
@@ -111,6 +123,56 @@ test('マゼンタの背景が 抜き残っていると 捕まる', () => {
   const png = save('mantis-bleed', draw({ body: [90, 150, 60], bleed: [255, 0, 255] }));
   const spill = backgroundSpill(png, MAGENTA);
   assert.ok(spill.strong > 0, '抜き残した マゼンタを 見のがした');
+});
+
+console.log('\n== 離れた欠片 ==');
+
+test('ふつうの絵は かたまりが 1つ', () => {
+  const png = save('one-blob', draw({ body: [110, 45, 30] }));
+  const big = contentBlobs(png).filter((b) => b.count >= 20);
+  assert.equal(big.length, 1, `かたまりが ${big.length} 個 見つかった`);
+});
+
+test('本体から 離れた 細い線を 見つけられる', () => {
+  // カブトムシに 入っていたもの（y=88 に 幅82px の 1px 線）と 同じ形。
+  const png = save('stray-line', draw({ body: [110, 45, 30], stray: { x0: 7, x1: 88, y0: 88, y1: 88 } }));
+  const strays = contentBlobs(png)
+    .slice(1)
+    .filter((b) => b.count >= 20);
+  assert.equal(strays.length, 1, '離れた線を 見のがした');
+  const b = strays[0];
+  assert.ok(b.height <= 2 && b.width >= SIZE * 0.25, `細い直線と 判定できない（${b.width}×${b.height}）`);
+});
+
+test('離れた線は 外接矩形を ひろげ、占有率を 大きく 見せる', () => {
+  // これが カブトムシで 起きたこと。占有率だけ 見ていると 見ぬけない。
+  const withLine = save('occ-with', draw({ body: [110, 45, 30], stray: { x0: 7, x1: 88, y0: 88, y1: 88 } }));
+  const blobs = contentBlobs(withLine);
+  const body = blobs[0];
+  const all = blobs.reduce(
+    (acc, b) => ({
+      minX: Math.min(acc.minX, b.minX),
+      maxX: Math.max(acc.maxX, b.maxX),
+    }),
+    { minX: SIZE, maxX: -1 }
+  );
+  assert.ok(all.maxX - all.minX > body.maxX - body.minX, '線が 外接矩形を ひろげていない');
+});
+
+console.log('\n== ふちの なめらかさ ==');
+
+test('アンチエイリアスが かかった絵は 通る', () => {
+  const png = save('aa', draw({ body: [110, 45, 30], smooth: true }));
+  const q = edgeQuality(png);
+  assert.ok(q.smoothness >= 0.5, `なめらかさ ${q.smoothness.toFixed(2)}`);
+});
+
+test('アルファが 2値に つぶれていると 捕まる', () => {
+  // オオクワガタが これで 届いた。透過・大きさ・占有率・余白は すべて 通ってしまう。
+  const png = save('hard', draw({ body: [110, 45, 30], smooth: false }));
+  const q = edgeQuality(png);
+  assert.equal(q.semi, 0, `半透明が ${q.semi}個 ある（2値化の 再現に なっていない）`);
+  assert.ok(q.smoothness < 0.5, `なめらかさ ${q.smoothness.toFixed(2)}`);
 });
 
 console.log('\n== 承認ずみの 絵 ==');

@@ -156,6 +156,85 @@ export function contentBounds(png, threshold = 16) {
   return { minX, minY, maxX, maxY, width: maxX - minX + 1, height: maxY - minY + 1 };
 }
 
+// 中身を つながりごとに 分ける。本体から 離れた 欠片を 見つけるため。
+// カブトムシに 本体と つながっていない 横線が 1本 入っていた（y=88・幅82px）。
+// これが 外接矩形を ひろげ、占有率を 85% に 見せていた（虫だけなら 76%）。
+export function contentBlobs(png, threshold = 16) {
+  if (!png.alpha) return [];
+  const { width: w, height: h, alpha } = png;
+  const seen = new Uint8Array(w * h);
+  const blobs = [];
+
+  for (let start = 0; start < w * h; start++) {
+    if (seen[start] || alpha[start] <= threshold) continue;
+    const stack = [start];
+    seen[start] = 1;
+    const b = { count: 0, minX: w, minY: h, maxX: -1, maxY: -1 };
+
+    while (stack.length) {
+      const i = stack.pop();
+      const x = i % w;
+      const y = (i - x) / w;
+      b.count++;
+      if (x < b.minX) b.minX = x;
+      if (x > b.maxX) b.maxX = x;
+      if (y < b.minY) b.minY = y;
+      if (y > b.maxY) b.maxY = y;
+
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          const nx = x + dx;
+          const ny = y + dy;
+          if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+          const k = ny * w + nx;
+          if (!seen[k] && alpha[k] > threshold) {
+            seen[k] = 1;
+            stack.push(k);
+          }
+        }
+      }
+    }
+    b.width = b.maxX - b.minX + 1;
+    b.height = b.maxY - b.minY + 1;
+    blobs.push(b);
+  }
+  return blobs.sort((a, b) => b.count - a.count);
+}
+
+// ふちの なめらかさ。半透明の 画素が どれだけ あるかで 見る。
+//
+// PNG を 書き出し直すときに アルファを 2値（0か255）に つぶしてしまうことがある。
+// 見た目は ギザギザに なるが、透過・大きさ・占有率・余白は すべて 通ってしまう。
+// オオクワガタが これで 届いた（半透明 0画素・他は 18〜73%）。
+export function edgeQuality(png, threshold = 16) {
+  if (!png.alpha) return null;
+  const { width: w, height: h, alpha } = png;
+  const visible = (i) => alpha[i] > threshold;
+  let solid = 0;
+  let semi = 0;
+  let edge = 0;
+
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = y * w + x;
+      if (!visible(i)) continue;
+      if (alpha[i] < 240) semi++;
+      else solid++;
+      if (
+        (x > 0 && !visible(i - 1)) ||
+        (x < w - 1 && !visible(i + 1)) ||
+        (y > 0 && !visible(i - w)) ||
+        (y < h - 1 && !visible(i + w))
+      ) {
+        edge++;
+      }
+    }
+  }
+  if (!edge) return null;
+  // ふち1画素あたり 半透明が いくつ あるか。なめらかな絵は 1.0 前後、2値化された絵は 0。
+  return { solid, semi, edge, smoothness: semi / edge };
+}
+
 // 生成に つかった 背景色が 絵に 残っていないかを 見る（色かぶり／green spill）。
 //
 // つやのある 暗い色の 虫を 緑の 背景で 作ると、上翅に 緑が 映りこんで オリーブ色に にごる。

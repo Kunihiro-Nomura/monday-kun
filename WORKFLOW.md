@@ -70,32 +70,62 @@ ChatGPT にリポジトリを見せれば、そのまま読めます。
 
 ### ChatGPT に貼る文（これだけ）
 
-はじめて渡すとき:
+**Claude は毎回この形のコピーブロックを出します。**野村さんは貼るだけです。
+文面を組み立てたり、複数の場所から拾い集めたりする必要はありません。
+
+ブロックには**リポジトリの読み込み**と**完成品のリポジトリへの登録**が必ず両方入ります。
+登録まで書いておかないと、画像がチャットに返ってきたところで止まり、
+そこから先を人が手で運ぶことになるためです。
 
 ```
 このリポジトリ https://github.com/Kunihiro-Nomura/monday-kun の
 グラフィック担当をお願いします。
 
-まず AGENTS.md を読んでください。
-あなたの役割・守るべき絵の仕様・納品の形式がすべて書いてあります。
-発注書は game/art/orders.json です（機械可読）。
+【まず読むもの】
+1. AGENTS.md
+   あなたの役割・絵の共通仕様・納品の形式がすべて書いてあります
+2. game/art/orders.json
+   発注書（機械可読）。数値が食い違う場合はこのファイルが正です
+3. game/art/briefs/A-世界1のこり7体.md と game/art/briefs/B-寄生4体.md
+   1体ごとの英語・日本語プロンプトが入っています
+4. game/assets/units/kabuto.png と game/assets/source/kabuto-master.png
+   承認ずみの基準絵です。線の太さ・彩度・光の向きをこれに揃えてください
 
-game/assets/units/kabuto.png が承認ずみの基準絵です。
-線の太さ・彩度・光の向きを、これに揃えてください。
+【作るもの】
+orders.json の inGame が true で status が todo のものを priority 順に。
+残り11体です:
+ant / kuwagata / mantis / dragonfly / hornet / ladybug / bombardier /
+komayubachi / yadoribae / harigane / aritake
 
-最初の仕事:
-orders.json の inGame が true で status が todo のものを、
-priority 順に1体ずつ作ってください。1体できるたびに見せてください。
+【絶対に守ること】
+- 真上からの俯瞰。頭は画面の上。擬人化しない（顔・表情をつけない）
+- 影は描かない。チーム色（青／赤）に塗らない。虫は実物の色のまま
+- できるなら生成時点で透過PNGを直接出力してください。
+  単色背景から切り抜く場合は、必ず色かぶりの除去を行ってください
+  （カブトムシは緑背景の映りこみで上翅がオリーブ色になり作り直しになりました）
+- harigane は類線形動物、aritake は菌類です。昆虫として描かないでください
 
-納品先: game/assets/units/<id>.png（96×96・透過PNG）
-game/assets/ 以外のファイルは変更しないでください。
+【リポジトリへの登録（ここまでやってください）】
+1. main から作業ブランチを作る（例: chatgpt/art-batch-1）
+2. 完成した PNG を game/assets/units/<id>.png に置く（96×96・透過PNG）
+   例: game/assets/units/ant.png
+3. game/assets/ 以外のファイルは変更しないでください
+   manifest.json と orders.json の status はこちら側で自動更新します
+4. そのブランチで Pull Request を作ってください（main に直接 push しない）
+5. PR を作ると自動検査が走ります。赤くなったら日本語で理由が出るので、
+   直して同じブランチに push し直してください
+
+自動検査の内容:
+PNGとして読めるか / 透過されているか / 96×96 か / 占有率が指定どおりか /
+上下左右に余白5%以上 / 背景色が絵に残っていないか（抜き残し・色かぶり）
 ```
 
-2回目以降は、これだけで通じます:
+**対象の ID は毎回、明示的に列挙します。**「todo のもの」とだけ書くと、
+どれが残っているのかが ChatGPT 側の解釈に委ねられるためです。
+いま残っているぶんは、次のコマンドで一覧できます。
 
-```
-orders.json の続きを priority 順にお願いします。
-kabuto.png をスタイル参照にしてください。
+```sh
+node scripts/check-assets.mjs   # 末尾に「まだ 届いていない」が出ます
 ```
 
 ### GitHub につながらないと言われたら

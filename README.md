@@ -11,7 +11,7 @@ iPhone の Safari で遊ぶ、昆虫がたたかうターン制ストラテジ�
 
 | したいこと | ここを開く |
 |---|---|
-| **新しい変更をとりこむ** | [変更をとりこむ画面をひらく](https://github.com/Kunihiro-Nomura/monday-kun/compare/main...claude/famicom-wars-clone-plan-fldpmj) |
+| **新しい変更をとりこむ** | [取り込み待ちの一覧をひらく](https://github.com/Kunihiro-Nomura/monday-kun/pulls) |
 | **テストが通ったか見る** | [テストの結果](https://github.com/Kunihiro-Nomura/monday-kun/actions) |
 | **iPhone で遊ぶ** | https://kunihiro-nomura.github.io/monday-kun/game/ （※手順2をやってから） |
 | 公開の設定をする | [公開の設定](https://github.com/Kunihiro-Nomura/monday-kun/settings/pages) |
@@ -26,9 +26,15 @@ iPhone の Safari で遊ぶ、昆虫がたたかうターン制ストラテジ�
 | **プルリクエスト（PR）** | 「このコピーの変更を本体に入れていいですか？」というお伺い |
 | **マージ** | 実際に本体（`main`）に入れること |
 
-Claude（設計・コード担当）は、いつも `claude/famicom-wars-clone-plan-fldpmj`
-という**作業用のコピー**で作業します。
+Claude（設計・コード担当）は、**作業のたびに新しい作業用のコピー**を作って進め、
+できあがったら**プルリクエストまで自分で作ります**。
 野村さんが**マージ**して初めて、本体に反映されます。
+
+> **なぜ「いつも同じコピー」ではないのか**
+> 以前は決まった名前のコピー1つを見に行く手順でしたが、
+> **別の名前のコピーで作った変更が誰の目にも触れないまま埋もれる**事故が起きました
+> （難易度選択の実装が1日以上、取り込まれずに残っていました）。
+> いまは**取り込み待ちの一覧**を見る形にしてあるので、名前が何であっても必ず出てきます。
 
 ---
 
@@ -42,21 +48,23 @@ Claude が「push しました」と言ったら、これをやります。
 ### やりかた
 
 1. これを開く
-   → https://github.com/Kunihiro-Nomura/monday-kun/compare/main...claude/famicom-wars-clone-plan-fldpmj
+   → https://github.com/Kunihiro-Nomura/monday-kun/pulls
 
-2. 緑色の **「Create pull request」** を押す
+2. 一覧に出ているものを押して開く（**PR は Claude が作ってあります**）
 
-3. タイトルはそのままでよいので、もう一度 **「Create pull request」** を押す
-
-4. 画面の下のほうにテストの結果が出ます。**数分待ってください**
+3. 画面の下のほうにテストの結果が出ます。**数分待ってください**
    - ✅ 緑のチェック → 次へ
    - ❌ 赤いバツ → **マージしないで**、そのまま Claude に「テストが落ちています」と伝える
 
-5. **「Merge pull request」** → **「Confirm merge」** を押す
+4. **「Merge pull request」** → **「Confirm merge」** を押す
 
-6. 完了です。iPhone のゲームを開いて、いったん閉じてから開き直すと新しくなります
+5. 完了です。iPhone のゲームを開いて、いったん閉じてから開き直すと新しくなります
 
-> **迷ったら**: 4 で赤いバツが出たときだけ止まってください。それ以外は押して進めて大丈夫です。
+> **迷ったら**: 3 で赤いバツが出たときだけ止まってください。それ以外は押して進めて大丈夫です。
+>
+> **一覧が空っぽのとき**は、取り込むものが無いということです。
+> それでも Claude が「push しました」と言っている場合は、PR の作り忘れなので伝えてください
+> （[作業用のコピー一覧](https://github.com/Kunihiro-Nomura/monday-kun/branches)からも確認できます）。
 
 ---
 

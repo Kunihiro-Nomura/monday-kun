@@ -9,7 +9,7 @@
 
 import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { decodePng, contentBounds, backgroundSpill } from './png.mjs';
+import { decodePng, contentBounds, backgroundSpill, contentBlobs, edgeQuality } from './png.mjs';
 
 const ROOT = new URL('..', import.meta.url).pathname;
 const UNITS_DIR = join(ROOT, 'game/assets/units');
@@ -27,6 +27,10 @@ const OCCUPANCY_TOLERANCE = 0.05;
 // まちがって 落として 納品を 止めるより、数字を 出して 人が 見るほうが 損が 小さい。
 const SPILL_WARN_RATIO = 0.12;
 const SPILL_FAIL_RATIO = 0.3;
+// これ未満の 欠片は アンチエイリアスで ちぎれた 触角の先などなので 見のがす。
+const STRAY_MIN_PIXELS = 20;
+// ふち1画素あたりの 半透明の数。届いた12枚は 0.00（2値化）と 1.08〜1.96 に きれいに 割れる。
+const SMOOTHNESS_MIN = 0.5;
 
 let errors = 0;
 let warnings = 0;
@@ -153,6 +157,38 @@ for (const file of files.sort()) {
     } else if (spill.tintedRatio > SPILL_WARN_RATIO) {
       warn(id, `${bgName}寄りの画素が ${pct}% あります（色かぶりの 気配）。実物の色から ずれていないか 見てください`);
     }
+  }
+
+  // 7. 本体から 離れた 欠片
+  //    細い直線は まず 書き出しの ゴミ。それ以外は 形の一部かもしれないので 人に 見せる。
+  for (const b of contentBlobs(png).slice(1)) {
+    if (b.count < STRAY_MIN_PIXELS) continue;
+    const thin = b.height <= 2 || b.width <= 2;
+    const long = Math.max(b.width, b.height) >= png.width * 0.25;
+    if (thin && long) {
+      fail(
+        id,
+        `本体から 離れた 細い線が 入っています（${b.width}×${b.height}・y=${b.minY}）。` +
+          '書き出しの ゴミです。消してください'
+      );
+    } else {
+      warn(
+        id,
+        `本体から 離れた 部分が あります（${b.count}画素・x=${b.minX}..${b.maxX} y=${b.minY}..${b.maxY}）。` +
+          'つながっているべき形なら つなげてください'
+      );
+    }
+  }
+
+  // 8. ふちの なめらかさ（アルファを 2値に つぶしていないか）
+  const edges = edgeQuality(png);
+  if (edges && edges.smoothness < SMOOTHNESS_MIN) {
+    fail(
+      id,
+      `ふちが ギザギザです（半透明の画素が ${edges.semi}個しか ありません）。` +
+        'PNG を 書き出し直すときに 透明度が 0か100 に つぶれています。' +
+        'アンチエイリアスを 残したまま 書き出してください'
+    );
   }
 
   if (!lines.some((l) => l.includes(`${id}:`) && l.startsWith('  NG'))) {

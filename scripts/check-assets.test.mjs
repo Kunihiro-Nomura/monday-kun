@@ -12,7 +12,15 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { decodePng, encodePng, backgroundSpill, contentBlobs, edgeQuality } from './png.mjs';
+import {
+  decodePng,
+  encodePng,
+  backgroundSpill,
+  contentBlobs,
+  edgeQuality,
+  haloBrightness,
+  colorCount,
+} from './png.mjs';
 
 let passed = 0;
 let failed = 0;
@@ -39,7 +47,8 @@ const MAGENTA = '#FF00FF';
 //   bleed   … 体の まわりに 残した 背景色（切り抜きもれ。null なら 透明）
 //   smooth  … ふちに 半透明を 置くか（本物の絵は アンチエイリアスが かかっている）
 //   stray   … 本体から 離れた 欠片 {x0,x1,y0,y1}
-function draw({ body, outline = [20, 16, 14], bleed = null, smooth = true, stray = null }) {
+//   fringe  … ふちの 半透明に つかう 色（既定は 本体側の色。明るい色を 渡すと ハローに なる）
+function draw({ body, outline = [20, 16, 14], bleed = null, smooth = true, stray = null, fringe = null }) {
   const rgba = new Uint8Array(SIZE * SIZE * 4);
   const cx = SIZE / 2;
   const cy = SIZE / 2;
@@ -63,7 +72,7 @@ function draw({ body, outline = [20, 16, 14], bleed = null, smooth = true, stray
       else if (smooth && d <= outer + 1.5) {
         // ふちの 1.5px を 半透明に する
         const a = Math.round(255 * Math.max(0, 1 - (d - outer) / 1.5));
-        if (a > 0) put(x, y, bleed || outline, a);
+        if (a > 0) put(x, y, fringe || bleed || outline, a);
       }
     }
   }
@@ -173,6 +182,57 @@ test('アルファが 2値に つぶれていると 捕まる', () => {
   const q = edgeQuality(png);
   assert.equal(q.semi, 0, `半透明が ${q.semi}個 ある（2値化の 再現に なっていない）`);
   assert.ok(q.smoothness < 0.5, `なめらかさ ${q.smoothness.toFixed(2)}`);
+});
+
+console.log('\n== ふちの ハロー ==');
+
+test('ふつうに 縮小した ふちは ハローに ならない', () => {
+  const png = save('no-halo', draw({ body: [110, 45, 30] }));
+  const halo = haloBrightness(png);
+  assert.ok(halo <= 30, `本体より +${halo.toFixed(0)} 明るい`);
+});
+
+test('黒い虫に 明るい ふちを 足すと 捕まる', () => {
+  // オオクワガタの 2回目の 納品が これ。ギザギザを 直そうとして
+  // アルファを ぼかし、外側に 明るい 半透明が 付いた。
+  const png = save('halo', draw({ body: [15, 12, 10], outline: [10, 8, 6], fringe: [235, 235, 235] }));
+  const halo = haloBrightness(png);
+  assert.ok(halo > 30, `ハローを 見のがした（+${halo.toFixed(0)}）`);
+});
+
+test('ギザギザの絵には ハローの 判定を かけない（半透明が 無いので）', () => {
+  const png = save('hard-nohalo', draw({ body: [15, 12, 10], smooth: false }));
+  assert.equal(haloBrightness(png), null, 'ふちが 無いのに 数字が 出た');
+});
+
+console.log('\n== 色数 ==');
+
+test('見えている色だけを 数える（透明な部分は 数えない）', () => {
+  // 落とす基準では ないが、絵が 痩せたときに 人が 気づくための 数字なので、
+  // 数えかたが 合っていることは 押さえておく。
+  const rgba = new Uint8Array(SIZE * SIZE * 4);
+  const palette = [
+    [200, 10, 10],
+    [10, 200, 10],
+    [10, 10, 200],
+  ];
+  palette.forEach((c, n) => {
+    for (let x = 0; x < 10; x++) {
+      const i = ((5 + n) * SIZE + x) * 4;
+      rgba[i] = c[0];
+      rgba[i + 1] = c[1];
+      rgba[i + 2] = c[2];
+      rgba[i + 3] = 255;
+    }
+  });
+  // 透明なのに 色が 入っている画素。数に 入れては いけない。
+  const ghost = (40 * SIZE + 40) * 4;
+  rgba[ghost] = 255;
+  rgba[ghost + 1] = 255;
+  rgba[ghost + 2] = 0;
+  rgba[ghost + 3] = 0;
+
+  assert.equal(colorCount(save('palette', rgba)), 3);
 });
 
 console.log('\n== 承認ずみの 絵 ==');

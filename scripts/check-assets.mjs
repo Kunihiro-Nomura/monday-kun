@@ -9,7 +9,15 @@
 
 import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { decodePng, contentBounds, backgroundSpill, contentBlobs, edgeQuality } from './png.mjs';
+import {
+  decodePng,
+  contentBounds,
+  backgroundSpill,
+  contentBlobs,
+  edgeQuality,
+  haloBrightness,
+  colorCount,
+} from './png.mjs';
 
 const ROOT = new URL('..', import.meta.url).pathname;
 const UNITS_DIR = join(ROOT, 'game/assets/units');
@@ -29,8 +37,11 @@ const SPILL_WARN_RATIO = 0.12;
 const SPILL_FAIL_RATIO = 0.3;
 // これ未満の 欠片は アンチエイリアスで ちぎれた 触角の先などなので 見のがす。
 const STRAY_MIN_PIXELS = 20;
-// ふち1画素あたりの 半透明の数。届いた12枚は 0.00（2値化）と 1.08〜1.96 に きれいに 割れる。
+// ふち1画素あたりの 半透明の数。届いた12枚は 0.00（2値化）と 1.02〜1.96 に きれいに 割れる。
 const SMOOTHNESS_MIN = 0.5;
+// ふちが 本体より どれだけ 明るければ ハローと 見なすか。
+// 良い12枚は -79.2〜+0.2。ハローが 付いた オオクワガタは +106.5 だった。
+const HALO_LIMIT = 30;
 
 let errors = 0;
 let warnings = 0;
@@ -191,8 +202,25 @@ for (const file of files.sort()) {
     );
   }
 
+  // 9. ふちの ハロー（明るい 光の輪）
+  const halo = haloBrightness(png);
+  if (halo !== null && halo > HALO_LIMIT) {
+    fail(
+      id,
+      `ふちに 明るい 光の輪が 付いています（本体より +${halo.toFixed(0)}・上限 +${HALO_LIMIT}）。` +
+        'アルファを ぼかして ふちを 足さないでください。' +
+        '大きい絵から 縮小すれば、ふちは 自然に なめらかに なります'
+    );
+  }
+
   if (!lines.some((l) => l.includes(`${id}:`) && l.startsWith('  NG'))) {
-    ok(id, `${png.width}×${png.height} / 占有率 ${(occupancy * 100).toFixed(0)}% / 余白 ${(margin * 100).toFixed(1)}%`);
+    // 色数と なめらかさも 出す。落とす基準では ないが、絵が 痩せたときに 気づける。
+    // （差し替えで 1482色 → 61色 に なった カブトムシは、当時 どの検査も 通った）
+    ok(
+      id,
+      `${png.width}×${png.height} / 占有率 ${(occupancy * 100).toFixed(0)}% / 余白 ${(margin * 100).toFixed(1)}%` +
+        ` / 色数 ${colorCount(png)} / なめらかさ ${edges ? edges.smoothness.toFixed(2) : '—'}`
+    );
   }
 }
 

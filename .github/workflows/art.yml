@@ -51,6 +51,12 @@ jobs:
             echo 'manifest.json に変更はありません'
           fi
 
+      # 検査そのものが 効いているかを 先に 見る。
+      # わざと 汚した 絵を つくって 捕まえられることを たしかめるので、
+      # 「エラー0件」が 検査の 手ぬかりでは ないことを 保証できる。
+      - name: 受け入れ検査そのものの テスト
+        run: node scripts/check-assets.test.mjs
+
       - name: スプライトの受け入れ検査
         run: node scripts/check-assets.mjs
 

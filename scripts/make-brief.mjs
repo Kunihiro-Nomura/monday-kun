@@ -75,12 +75,23 @@ out.push(`# 『昆虫戦争』グラフィック発注（${targets.length}点）
 - **${c.canvas}×${c.canvas}** にリサイズ
 - ファイル名は各項目の「ファイル名」のとおり
 
+## 背景と透過について（1体目の納品で分かったこと・重要）
+
+- **できるなら、生成の時点で透過PNGを直接出力してください。**そのほうが確実です。
+  各項目の「背景色」は、透過で出せないときの**次善の指定**です
+- 単色背景から切り抜く場合、**つやのある暗い色の被写体は、光沢面に背景色が映りこんで濁ります**
+  （カブトムシの上翅がオリーブ色になり、作り直しになりました）。
+  切り抜くときは必ず**色かぶりの除去（spill suppression）**を行ってください
+- 切り抜いたあと、**色が実物から外れていないかを目で確かめてください。**
+  学習教材なので、カブトムシが緑がかると「カナブン」に見えてしまいます
+
 ## 受け入れ基準（機械で検査します）
 
 - ${c.canvas}×${c.canvas} であること
 - 四隅が完全に透明であること（背景が残っていないこと）
 - **占有率**が指定どおりであること（±5%）— 虫どうしの大きさの比率が狂わないための指定です
 - 上下左右に ${c.minMargin * 100}% 以上の余白があること
+- **背景色が絵に残っていないこと**（抜き残し・色かぶりを数値で見ています）
 - 48px に縮小しても、ほかの虫と見分けがつくこと
 `);
 
@@ -108,8 +119,8 @@ ${o.featureEn}
 Head pointing up, naturally balanced posture, centered, with a small margin around it.
 Semi-realistic field-guide illustration style. Not anthropomorphic, no face, no cartoon eyes.
 Strong dark outline. Soft light from upper left. No cast shadow, no ground.
-Flat solid ${o.background} background (${c.backgrounds[o.background]}). Square canvas.
-Accurate natural coloration.${warn ? ' NOT an insect.' : ''}
+Transparent background if your tool can output one; otherwise a flat solid ${o.background} background (${c.backgrounds[o.background]}).
+Square canvas. Accurate natural coloration, no color cast from the background.${warn ? ' NOT an insect.' : ''}
 \`\`\`
 
 ### 日本語版
@@ -120,7 +131,8 @@ ${o.featureJa}
 頭を上に向け、左右の重心を揃えた自然な姿勢。
 図鑑イラスト風のセミリアルな描き方で、擬人化しない。顔や表情は付けない。
 濃い輪郭線をはっきり付ける。光は左上から。影は描かない。
-背景は単色の${bg(o.background)}。正方形。周囲に少し余白を残す。実物に忠実な色。
+背景は透過。透過で出せない場合のみ単色の${bg(o.background)}。
+正方形。周囲に少し余白を残す。実物に忠実な色で、背景色の映りこみを残さない。
 \`\`\`
 `);
 }
@@ -129,7 +141,7 @@ out.push(`---
 
 ## 作ったあと
 
-1. 背景を抜いて透過PNGにする
+1. 背景を抜いて透過PNGにする（**色かぶりの除去を忘れずに**）
 2. ${c.canvas}×${c.canvas} にリサイズし、被写体を中央に、指定の占有率で配置する
 3. できたファイルをこのチャットに添付して返してください
 

@@ -62,13 +62,11 @@ Claude と ChatGPT は別の会社の別の製品なので、**両者を直接�
 
 渡すのは **リポジトリのURLと、下の短い文だけ**です。
 
-### ⚠️ 先に必要な準備
+### 先に必要な準備
 
-`AGENTS.md` と `game/art/orders.json` は **すでに `main` にあります**。
+**ありません。** `AGENTS.md`・`game/art/orders.json`・発注書（`game/art/briefs/`）は
+**すべて `main` にあります**（寄生4体を含む全12体ぶん）。
 ChatGPT にリポジトリを見せれば、そのまま読めます。
-
-ただし**新しく足した発注（寄生4体）と発注書は、作業ブランチにしかありません。**
-`claude/famicom-wars-clone-plan-fldpmj` を `main` にマージしてから渡してください。
 
 ### ChatGPT に貼る文（これだけ）
 

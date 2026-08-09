@@ -235,6 +235,50 @@ export function edgeQuality(png, threshold = 16) {
   return { solid, semi, edge, smoothness: semi / edge };
 }
 
+// ふちに 明るい 光の輪（ハロー）が 付いていないか。
+//
+// 「ふちが ギザギザ」を 直すときに、アルファを ぼかして 外側に 半透明を
+// 足してしまうことがある。黒い虫に 白い縁どりが 付き、盤面で 光って見える。
+// オオクワガタの 2回目の 納品が これだった。
+//
+// 半透明の画素（＝ふち）の 明るさが、不透明な画素（＝本体）より どれだけ
+// 明るいかで 測る。ふつうに 縮小して できた ふちは 本体の色に 寄るので、
+// この差は 0 以下に なる。
+export function haloBrightness(png, alphaThreshold = 16) {
+  if (!png.rgb || !png.alpha) return null;
+  const { width: w, height: h, alpha, rgb } = png;
+  const lum = (i) => 0.299 * rgb[i * 3] + 0.587 * rgb[i * 3 + 1] + 0.114 * rgb[i * 3 + 2];
+
+  let edgeSum = 0;
+  let edgeCount = 0;
+  let bodySum = 0;
+  let bodyCount = 0;
+
+  for (let i = 0; i < w * h; i++) {
+    if (alpha[i] <= alphaThreshold) continue;
+    if (alpha[i] < 240) {
+      edgeSum += lum(i);
+      edgeCount++;
+    } else {
+      bodySum += lum(i);
+      bodyCount++;
+    }
+  }
+  if (!edgeCount || !bodyCount) return null;
+  return edgeSum / edgeCount - bodySum / bodyCount;
+}
+
+// 不透明な部分に つかわれている 色の数。絵が どれだけ 描きこまれているかの めやす。
+export function colorCount(png, alphaThreshold = 16) {
+  if (!png.rgb || !png.alpha) return null;
+  const seen = new Set();
+  for (let i = 0; i < png.width * png.height; i++) {
+    if (png.alpha[i] <= alphaThreshold) continue;
+    seen.add((png.rgb[i * 3] << 16) | (png.rgb[i * 3 + 1] << 8) | png.rgb[i * 3 + 2]);
+  }
+  return seen.size;
+}
+
 // 生成に つかった 背景色が 絵に 残っていないかを 見る（色かぶり／green spill）。
 //
 // つやのある 暗い色の 虫を 緑の 背景で 作ると、上翅に 緑が 映りこんで オリーブ色に にごる。

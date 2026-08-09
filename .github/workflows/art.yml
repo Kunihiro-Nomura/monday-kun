@@ -60,6 +60,21 @@ jobs:
       - name: スプライトの受け入れ検査
         run: node scripts/check-assets.mjs
 
+      # 機械は「仕様どおりか」しか 見られない。**絵として 良いか**は 人が 見るしかない。
+      # 見るのを いちばん 安くするため、1枚に まとめて ここに 置いておく。
+      # 検査が 落ちても 作る（落ちた絵こそ 見たいので）。
+      - name: 絵の一覧をつくる
+        if: always()
+        run: node scripts/make-contact-sheet.mjs artifacts/contact-sheet.png
+
+      - name: 絵の一覧をのこす
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: contact-sheet
+          path: artifacts/contact-sheet.png
+          if-no-files-found: ignore
+
   game-tests:
     # 絵を差し替えてもゲームが壊れていないことを確認する
     runs-on: ubuntu-latest

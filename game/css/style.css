@@ -120,6 +120,32 @@ html, body {
 /* 世界の 番号が とぶところの ひとこと */
 .stage-note { font-size: 12px; color: #aebba6; line-height: 1.6; padding: 10px 12px; margin: 4px 0; border-left: 3px solid #4d6a45; }
 
+/* ---- むずかしさ えらび ---- */
+/* ステージ一覧の 上に すえおく。スクロールしても 見うしなわないよう 外に出してある */
+.difficulty { flex: 0 0 auto; padding: 12px 14px 0; }
+.difficulty-label { font-size: 12px; color: #aebba6; margin-bottom: 6px; }
+.difficulty-choices { display: flex; gap: 8px; }
+.difficulty-choice {
+  appearance: none;
+  border: 2px solid #3d5133;
+  border-radius: 12px;
+  background: #2b3a24;
+  color: #cfd8c8;
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.3;
+  padding: 9px 12px;
+  min-height: 46px;
+  flex: 1 1 0;
+  text-align: center;
+  cursor: pointer;
+}
+.difficulty-choice .difficulty-lead { display: block; font-size: 11px; font-weight: 400; color: #93a38b; margin-top: 2px; }
+.difficulty-choice[aria-pressed='true'] { background: #4a7c3f; border-color: #7fb46e; color: #fff; }
+.difficulty-choice[aria-pressed='true'] .difficulty-lead { color: #dcecd4; }
+.difficulty-note { font-size: 12px; color: #aebba6; line-height: 1.6; margin-top: 8px; }
+
 /* ---- ゲーム盤 ---- */
 .board-wrap { flex: 1; position: relative; min-height: 0; }
 #board { width: 100%; height: 100%; display: block; touch-action: none; }

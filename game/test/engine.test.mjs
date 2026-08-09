@@ -9,6 +9,7 @@ import { AI } from '../js/ai.js';
 import { MAPS, getMap } from '../js/data/maps.js';
 import { UNITS, DAMAGE, baseDamage } from '../js/data/units.js';
 import { TERRAIN, CHAR_TO_TERRAIN } from '../js/data/terrain.js';
+import { DIFFICULTIES, DIFFICULTY_LIST, DEFAULT_DIFFICULTY, getDifficulty } from '../js/data/difficulty.js';
 
 let passed = 0;
 let failed = 0;
@@ -213,10 +214,18 @@ test('どの面も 一方的に ならない', () => {
   // AI どうしの 勝率は 人が 遊んだときの 手ごたえと 同じでは ないが、
   // 0% と 100% は はっきり おかしい。そこだけを しばる。
   // くわしい 数字は node scripts/measure-stages.mjs で 見る。
-  const RUNS = 8;
+  //
+  // 回数は 少なすぎては いけない。8回では 勝率 75%の面でも 10%くらいの 確からしさで
+  // 8連勝してしまい、なんともない面が ときどき 落ちる（じっさい そうなっていた）。
+  // 24回なら 勝率 75%の面が 全勝する 確からしさは 0.1%を 下まわる。
+  const RUNS = 24;
   for (const map of MAPS) {
-    const isTutorial = map.world === 1 && map.stage <= 2;
-    if (isTutorial) continue; // 1〜2面は わざと 勝つように してある
+    // 1〜2面は 敵が ほとんど 動かない 手びきの場。数えても 意味がない
+    if (map.world === 1 && map.stage <= 2) continue;
+
+    // 3面までは「1つだけ 教える」場。あおが 勝ちつづけるのが 正しい すがたなので、
+    // 「一度も 負けない」は ここでは とがめない（scripts/measure-stages.mjs と 同じ 線引き）。
+    const mustWin = map.world === 1 && map.stage <= 3;
 
     let wins = 0;
     let decided = 0;
@@ -238,7 +247,7 @@ test('どの面も 一方的に ならない', () => {
     }
     assert.ok(decided >= RUNS * 0.6, `${map.id}: ${RUNS}回中 ${decided}回しか 決着しない`);
     assert.ok(wins > 0, `${map.id}: あおが 一度も 勝てない`);
-    assert.ok(wins < RUNS, `${map.id}: あおが 一度も 負けない`);
+    if (!mustWin) assert.ok(wins < RUNS, `${map.id}: あおが 一度も 負けない`);
   }
 });
 
@@ -251,6 +260,129 @@ test('面の id と 世界・面ばんごうが 合っている', () => {
   for (const map of MAPS) {
     assert.equal(map.id, `w${map.world}s${map.stage}`, `${map.id} は w${map.world}s${map.stage} のはず`);
   }
+});
+
+console.log('\n== むずかしさ ==');
+// PLAN.md §3.11。
+// いじってよいのは あかチームの こうげき力だけ、という 約そくを ここで しばる。
+// ここが ゆるむと「はじめて」で 遊んでいた子が とつぜん 勝てなくなる。
+
+test('むずかしさを 書かないと「はじめて」に なる（いままでと 同じ）', () => {
+  const g = new Game(getMap('w1s3'));
+  assert.equal(g.difficulty.id, DEFAULT_DIFFICULTY);
+  assert.equal(g.difficulty.enemyPower, 1, '既定なのに 数値が いじられている');
+});
+
+test('知らない むずかしさを わたされても 落ちない', () => {
+  // セーブが こわれても、とりあえず 遊べるほうが よい
+  for (const bad of ['ghost', '', null, undefined, 42, {}]) {
+    assert.equal(new Game(getMap('w1s3'), { difficulty: bad }).difficulty.id, DEFAULT_DIFFICULTY);
+  }
+});
+
+test('むずかしさの 表が そろっている', () => {
+  assert.ok(DIFFICULTIES[DEFAULT_DIFFICULTY], '既定の むずかしさが 表に ない');
+  assert.equal(DIFFICULTY_LIST.length, Object.keys(DIFFICULTIES).length);
+  for (const d of DIFFICULTY_LIST) {
+    assert.equal(getDifficulty(d.id), d, `${d.id} を ID から ひけない`);
+    assert.ok(d.name && d.lead && d.note, `${d.id} に 画面に出す ことばが ない`);
+    assert.ok(d.enemyPower >= 1, `${d.id}: あかチームを 弱くする むずかしさは 用意しない`);
+    assert.equal(typeof d.rank, 'number', `${d.id} に rank が ない`);
+  }
+  // rank は「きびしさの 順」。クリア記録の 上書き判定に つかうので かさなっては いけない
+  const ranks = DIFFICULTY_LIST.map((d) => d.rank);
+  assert.equal(new Set(ranks).size, ranks.length, 'rank が かさなっている');
+  // やさしい ものほど 数値が 小さい、が くずれると 表の 意味が なくなる
+  for (let i = 1; i < DIFFICULTY_LIST.length; i++) {
+    assert.ok(
+      DIFFICULTY_LIST[i].enemyPower >= DIFFICULTY_LIST[i - 1].enemyPower,
+      `${DIFFICULTY_LIST[i].id} は 前の むずかしさより やさしい`
+    );
+  }
+});
+
+test('「ふつう」では あかチームの こうげきだけが つよくなる', () => {
+  // 同じ盤・同じ虫で、むずかしさ だけを 入れかえて くらべる
+  const pair = (level) => {
+    const g = new Game(getMap('w1s3'), { difficulty: level });
+    const red = g.unitsOf('enemy').find((u) => u.type === 'kabuto');
+    const blue = g.unitsOf('player').find((u) => u.type === 'ant');
+    return { red: g.calcDamage(red, blue, false), blue: g.calcDamage(blue, red, false) };
+  };
+  const easy = pair('beginner');
+  const hard = pair('normal');
+
+  assert.ok(hard.red > easy.red, `あかの こうげきが つよくなっていない (${easy.red} → ${hard.red})`);
+  // あおチームの 数値は 1ミリも 動かさない。図かんの 数字と 手ざわりを 合わせるため。
+  assert.equal(hard.blue, easy.blue, `あおの こうげきまで 変わっている (${easy.blue} → ${hard.blue})`);
+});
+
+test('むずかしさは 移動・お金・占領には ふれない', () => {
+  // ふえるのは こうげき力だけ。ほかを いじると 面ごとの 調整が やり直しに なる。
+  const easy = new Game(getMap('w1s5'), { difficulty: 'beginner' });
+  const hard = new Game(getMap('w1s5'), { difficulty: 'normal' });
+
+  assert.deepEqual(hard.funds, easy.funds, 'はじめの お金が ちがう');
+  assert.equal(hard.income, easy.income, '収入が ちがう');
+  assert.equal(hard.unitsOf('enemy').length, easy.unitsOf('enemy').length, '敵の数が ちがう');
+  for (const [i, u] of hard.units.entries()) {
+    const same = easy.units[i];
+    assert.equal(u.hp, same.hp, `${UNITS[u.type].name} の HP が ちがう`);
+    assert.equal(hard.movableTiles(u).length, easy.movableTiles(same).length, `${UNITS[u.type].name} の 動ける マスが ちがう`);
+  }
+});
+
+test('むずかしさと 寄生の 補正を かさねても こうげき力は 0 より 下に ならない', () => {
+  // 補正は かけ算で かさなる。どこかで 引き算に すると ここが 負に なる。
+  for (const d of DIFFICULTY_LIST) {
+    for (const [id, u] of Object.entries(UNITS)) {
+      if (!u.parasite) continue;
+      const { g, worm, prey } = parasiteField(id, 'kabuto', 50);
+      g.difficulty = d;
+      const victim = g.makeUnit('ant', 'player', 0, 5);
+      if (g.whyCannotInfest(worm, prey)) continue; // のっとれない 相手は とばす
+      g.infest(worm, prey);
+      if (!g.units.includes(prey)) continue; // のっとられて 味方に なった 場合
+      const dmg = g.calcDamage(prey, victim, false);
+      assert.ok(dmg >= 0, `${d.name} × ${u.name}: ダメージが ${dmg}`);
+      assert.ok(Number.isFinite(dmg), `${d.name} × ${u.name}: ダメージが 数では ない`);
+    }
+  }
+});
+
+test('「ふつう」でも どの面も 決着し、あおが 勝つ目は のこっている', () => {
+  // 面ごとに しばると 運で 落ちるので、ぜんぶの面を 合わせて 見る。
+  // 見たいのは「きびしくは なったが、勝てない ゲームには なっていない」こと。
+  // AI どうしの 勝率は 人が 遊んだときより きびしく 出る（人のほうが 上手い）。
+  const RUNS = 6;
+  let wins = 0;
+  let decided = 0;
+  let games = 0;
+
+  for (const map of MAPS) {
+    if (map.world === 1 && map.stage <= 2) continue; // 手びき面は わざと 勝つように してある
+    for (let i = 0; i < RUNS; i++) {
+      const g = new Game(map, { difficulty: 'normal' });
+      const red = new AI(g, map.aiLevel || 1);
+      const blue = new AI(g, map.aiLevel || 1);
+      blue.team = 'player';
+      for (let t = 0; t < 60 && g.status === 'playing'; t++) {
+        const actor = g.turnTeam === 'enemy' ? red : blue;
+        let guard = 0;
+        while (actor.takeOneAction() && guard++ < 300);
+        actor.produce();
+        if (g.status !== 'playing') break;
+        g.endTurn();
+      }
+      games++;
+      if (g.status !== 'playing') decided++;
+      if (g.status === 'win') wins++;
+    }
+  }
+
+  assert.ok(decided >= games * 0.8, `${games}回中 ${decided}回しか 決着しない`);
+  assert.ok(wins >= games * 0.15, `あおの 勝率が ${Math.round((wins / games) * 100)}% しかない（きびしすぎ）`);
+  assert.ok(wins <= games * 0.6, `あおの 勝率が ${Math.round((wins / games) * 100)}% もある（手ごたえが ない）`);
 });
 
 console.log('\n== 寄生 ==');

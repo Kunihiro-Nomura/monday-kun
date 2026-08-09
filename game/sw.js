@@ -6,7 +6,7 @@
 
 // ⚠ ファイルを 足したり 中身を 変えたら、かならず この数字を 上げること。
 // 上げ忘れると、ホーム画面に ついかずみの 端末で 古い版が 残りつづける。
-const VERSION = 'konchu-senso-v6';
+const VERSION = 'konchu-senso-v7';
 
 const ASSETS = [
   './',
@@ -21,6 +21,7 @@ const ASSETS = [
   './js/data/units.js',
   './js/data/terrain.js',
   './js/data/maps.js',
+  './js/data/difficulty.js',
   './assets/units/manifest.json',
   './assets/units/kabuto.png',
   './icons/icon-192.png',

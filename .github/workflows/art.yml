@@ -33,22 +33,22 @@ jobs:
         with:
           node-version: '22'
 
-      - name: manifest.json を作り直す
+      - name: manifest.json を作り直し、届いたぶんの status をそろえる
         run: node scripts/build-manifest.mjs
 
-      - name: 更新された manifest をコミット
+      - name: 更新された manifest と orders をコミット
         # PR 側のブランチに直接書き戻す。fork からの PR では書き込めないので、
         # そのときは検査だけ通して次のステップに進む。
         if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
         run: |
-          if [ -n "$(git status --porcelain game/assets/units/manifest.json)" ]; then
+          if [ -n "$(git status --porcelain game/assets/units/manifest.json game/art/orders.json)" ]; then
             git config user.name  'github-actions[bot]'
             git config user.email 'github-actions[bot]@users.noreply.github.com'
-            git add game/assets/units/manifest.json
-            git commit -m 'manifest.json を自動更新'
+            git add game/assets/units/manifest.json game/art/orders.json
+            git commit -m 'manifest.json と orders.json の status を自動更新'
             git push
           else
-            echo 'manifest.json に変更はありません'
+            echo 'manifest.json / orders.json に変更はありません'
           fi
 
       # 検査そのものが 効いているかを 先に 見る。

@@ -90,14 +90,16 @@ Claude 側が受け取って直します。役割を分けることで、お互�
 
 ### 3. 納品する
 
-1. 背景を抜いて**透過 PNG** にする
+1. 背景を抜いて**透過 PNG** にする（**色かぶりの除去を忘れずに**）
 2. **96×96** にリサイズする（被写体を中央に、`occupancy` の割合で配置）
 3. `game/assets/units/<id>.png` として置く
-4. `orders.json` の該当項目の `status` を `"done"` にする
-5. 高解像度の元画像を残す場合は `game/assets/source/<id>.png`（任意・ゲームには使われません）
-6. **PR を作る**（`main` に直接 push しない）
+4. 高解像度の元画像を残す場合は `game/assets/source/<id>.png`（任意・ゲームには使われません）
+5. **PR を作る**（`main` に直接 push しない）
 
-`manifest.json` は**手で編集しないでください**。push すると GitHub Actions が自動で作り直します。
+**`manifest.json` と `orders.json` は手で編集しないでください。**
+push すると GitHub Actions が、`manifest.json` の作り直しと
+**届いたぶんの `status` を `done` にする更新**を自動で行い、PR のブランチにコミットします。
+`orders.json` はあなたの担当範囲（`game/assets/**`）の外にあるので、触る必要はありません。
 
 ### 4. 自動チェックが走ります
 

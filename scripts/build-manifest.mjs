@@ -45,6 +45,21 @@ if (prev === next) {
   console.log(`manifest.json を更新しました（${units.length} 体）: ${units.join(', ') || 'なし'}`);
 }
 
+// 届いた ぶんの status を done に そろえる。
+//
+// もともとは グラフィック担当に 手で 直してもらう 決まりだったが、
+// 担当範囲は game/assets/ だけと 決めてあるので、頼むと 決まりと 食いちがう。
+// 絵が 置かれた という 事実から こちらで 決めるほうが、取りちがえが 起きない。
+// （届いていない ものを todo に 戻すことは しない。発注の 状態は 人が 決める）
+const delivered = new Set(units);
+const flipped = orders.orders.filter((o) => delivered.has(o.id) && o.status !== 'done');
+
+if (flipped.length) {
+  for (const o of flipped) o.status = 'done';
+  writeFileSync(ORDERS, `${JSON.stringify(orders, null, 2)}\n`);
+  console.log(`orders.json の status を done にしました: ${flipped.map((o) => o.id).join(', ')}`);
+}
+
 if (unknown.length) {
   console.warn(`\n⚠ orders.json に無い ID のファイルがあります: ${unknown.join(', ')}`);
   console.warn('  ファイル名の間違いか、orders.json への追加漏れです。ゲームには読み込まれません。');

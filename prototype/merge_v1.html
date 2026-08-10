@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<!-- Copyright (c) 2026 Kunihiro Nomura. All rights reserved. -->
+<!-- 昆虫戦争 (Konchu Senso) — 無断複製・改変・再配布を禁じます。詳細は /LICENSE を参照。 -->
+<!--
+  マージ×陣取り の 手ざわり確認プロトタイプ v1。
+
+  ファミコンウォーズ型の 戦闘を すて、
+  「マージで 群れを 育て、外来種から 森を 取りもどす」形を ためす。
+
+  ルールの きも:
+  - はたらきアリ 3匹が となりあうと「ぎょうれつ」に、ぎょうれつ 3つで「アリづか」に なる
+    （社会性昆虫の 群れの 成長。進化とは 呼ばない）
+  - カブトムシは 単独性なので マージできない。かわりに 1匹で 荒地を たがやせる
+    （マージできる虫と できない虫が いること 自体が 学び）
+  - たたかいは ない。外来種の アリは 数の力で「おいかえす」（にげていく の 原則を まもる）
+  - 敵は アルゼンチンアリの 巨大コロニー（実在の 侵略的外来種）。毎ターン 荒地を 広げてくる
+
+  絵は 仮置きの 絵文字。本番の 見た目では ない。
+-->
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no, viewport-fit=cover">
+<title>むしの もり（マージ陣取り 試作1）</title>
+<style>
+  :root {
+    --healed: #4a7c3f;
+    --healed2: #558b48;
+    --wild: #a89468;
+    --wild2: #b09c70;
+    --blight: #4a3050;
+    --blight2: #543a5a;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    background: #1c2417;
+    color: #e8f0dc;
+    font-family: "Hiragino Maru Gothic ProN", "BIZ UDGothic", sans-serif;
+    user-select: none;
+    -webkit-user-select: none;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  #hud {
+    width: 100%;
+    max-width: 430px;
+    padding: max(10px, env(safe-area-inset-top)) 12px 6px;
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-size: 14px;
+  }
+  #hud b { color: #b9e08c; }
+  #banner {
+    width: 100%;
+    max-width: 430px;
+    min-height: 44px;
+    padding: 6px 12px;
+    font-size: 14px;
+    line-height: 1.45;
+    color: #f4f9e8;
+  }
+  #board {
+    display: grid;
+    gap: 2px;
+    padding: 6px;
+    background: #121a0e;
+    border-radius: 12px;
+    touch-action: manipulation;
+  }
+  .tile {
+    width: var(--ts);
+    height: var(--ts);
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    font-size: calc(var(--ts) * 0.62);
+    line-height: 1;
+  }
+  .tile.healed { background: var(--healed); }
+  .tile.healed:nth-child(2n) { background: var(--healed2); }
+  .tile.wild { background: var(--wild); }
+  .tile.wild:nth-child(2n) { background: var(--wild2); }
+  .tile.blight { background: var(--blight); }
+  .tile.blight:nth-child(2n) { background: var(--blight2); }
+  .tile.move::after {
+    content: "";
+    position: absolute;
+    inset: 3px;
+    border-radius: 5px;
+    border: 3px solid #8fd0ff;
+    pointer-events: none;
+  }
+  .tile.sel::after {
+    content: "";
+    position: absolute;
+    inset: 1px;
+    border-radius: 6px;
+    border: 3px solid #ffe27a;
+    pointer-events: none;
+  }
+  .u { position: relative; filter: drop-shadow(0 2px 1px rgba(0,0,0,.45)); }
+  .u.acted { filter: grayscale(.7) opacity(.75); }
+  .u .tier {
+    position: absolute;
+    right: -7px;
+    bottom: -5px;
+    font-size: 11px;
+    font-weight: 800;
+    background: #2b3a24;
+    color: #cfe8ac;
+    border-radius: 8px;
+    padding: 0 4px;
+    border: 1px solid #56704a;
+  }
+  .u.enemy .tier { background: #4a2430; color: #ffc9c9; border-color: #8a4a55; }
+  #controls {
+    width: 100%;
+    max-width: 430px;
+    display: flex;
+    gap: 10px;
+    padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+  }
+  button {
+    flex: 1;
+    font: inherit;
+    font-size: 16px;
+    font-weight: 700;
+    padding: 12px;
+    border-radius: 12px;
+    border: 2px solid #56704a;
+    background: #33452a;
+    color: #e8f0dc;
+  }
+  button:active { transform: translateY(1px); }
+  #modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(10, 14, 8, .72);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 22px;
+  }
+  #modal.hidden { display: none; }
+  #modal .box {
+    background: #26331e;
+    border: 2px solid #56704a;
+    border-radius: 16px;
+    padding: 20px;
+    max-width: 340px;
+    line-height: 1.7;
+    font-size: 15px;
+  }
+  #modal h2 { color: #b9e08c; margin-bottom: 8px; font-size: 19px; }
+  #modal button { margin-top: 14px; width: 100%; }
+</style>
+</head>
+<body>
+<div id="hud">
+  <span><b id="turn">1</b>ばんめの はる</span>
+  <span>とりもどした もり <b id="score">0</b>%</span>
+</div>
+<div id="banner">アリを タップして、うごかす マスを えらぼう。3びき ならぶと…？</div>
+<div id="board"></div>
+<div id="controls">
+  <button id="endturn">ここまでに する（つぎの はるへ）</button>
+</div>
+<div id="modal" class="hidden"><div class="box"><h2 id="m-title"></h2><p id="m-body"></p><button id="m-btn">もういちど あそぶ</button></div></div>
+
+<script>
+"use strict";
+
+// ---- 盤 ----
+const W = 9, H = 13;
+const grid = []; // 'healed' | 'wild' | 'blight'
+const units = []; // {id,type,tier,team,x,y,acted,mobile}
+let nextId = 1;
+let turn = 1;
+let over = false;
+
+// 種のさだめ。merge: マージできるか（社会性か）。
+const SPECIES = {
+  ant:     { name: "はたらきアリ", emoji: "🐜", move: 2, merge: true },
+  ret:     { name: "アリの ぎょうれつ", emoji: "🐜", move: 2, merge: true },
+  mound:   { name: "アリづか", emoji: "⛰️", move: 0, merge: false },
+  kabuto:  { name: "カブトムシ", emoji: "🪲", move: 3, merge: false },
+  queen:   { name: "女王アリの 巣", emoji: "👑", move: 0, merge: false },
+  inv:     { name: "アルゼンチンアリ", emoji: "🐜", move: 2, merge: false },
+  invnest: { name: "外来種の 巣", emoji: "🕳️", move: 0, merge: false },
+};
+// マージの つながり: あり →(3)→ ぎょうれつ →(3)→ アリづか
+const MERGE_NEXT = { ant: "ret", ret: "mound" };
+// おいかえすのに いる「数の力」。tier は 群れの おおきさの めやす。
+const TIER = { ant: 1, ret: 3, mound: 5, kabuto: 2 };
+
+const idx = (x, y) => y * W + x;
+const inB = (x, y) => x >= 0 && y >= 0 && x < W && y < H;
+const N4 = (x, y) => [[x+1,y],[x-1,y],[x,y+1],[x,y-1]].filter(([a,b]) => inB(a,b));
+const unitAt = (x, y) => units.find(u => u.x === x && u.y === y);
+
+function spawn(type, team, x, y) {
+  const u = { id: nextId++, type, team, x, y, acted: false };
+  units.push(u);
+  return u;
+}
+
+// ---- はじめの ばんめん ----
+for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) grid[idx(x, y)] = "wild";
+
+const queen = spawn("queen", "player", 4, 11);
+for (const [x, y] of [[4,11],[3,11],[5,11],[4,10],[3,10],[5,10],[4,12],[3,12],[5,12]]) grid[idx(x, y)] = "healed";
+spawn("ant", "player", 3, 10);
+spawn("ant", "player", 5, 10);
+spawn("ant", "player", 4, 9);
+spawn("ant", "player", 2, 11);
+spawn("kabuto", "player", 6, 11);
+
+const nests = [spawn("invnest", "enemy", 1, 1), spawn("invnest", "enemy", 7, 1)];
+for (const n of nests) {
+  grid[idx(n.x, n.y)] = "blight";
+  for (const [x, y] of N4(n.x, n.y)) grid[idx(x, y)] = "blight";
+}
+
+// ---- 見た目 ----
+const boardEl = document.getElementById("board");
+const bannerEl = document.getElementById("banner");
+let sel = null; // えらんでいる ユニット
+let moves = []; // 行けるマスの idx
+
+const ts = Math.min(44, Math.floor((Math.min(innerWidth, 430) - 40) / W));
+document.documentElement.style.setProperty("--ts", ts + "px");
+boardEl.style.gridTemplateColumns = `repeat(${W}, ${ts}px)`;
+
+function banner(t) { bannerEl.textContent = t; }
+
+function draw() {
+  boardEl.innerHTML = "";
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const d = document.createElement("div");
+    d.className = "tile " + grid[idx(x, y)];
+    if (moves.includes(idx(x, y))) d.classList.add("move");
+    const u = unitAt(x, y);
+    if (u) {
+      if (sel === u) d.classList.add("sel");
+      const s = document.createElement("div");
+      s.className = "u" + (u.team === "enemy" ? " enemy" : "") + (u.acted && u.team === "player" ? " acted" : "");
+      s.textContent = SPECIES[u.type].emoji;
+      // 群れの おおきさを 数字で 見せる（ぎょうれつ=3、づか=5 …）
+      if (TIER[u.type] > 1 || u.type === "inv") {
+        const b = document.createElement("span");
+        b.className = "tier";
+        b.textContent = u.type === "inv" ? "外" : "×" + TIER[u.type];
+        s.appendChild(b);
+      }
+      if (u.type === "queen") s.style.fontSize = "1.15em";
+      d.appendChild(s);
+    }
+    d.addEventListener("click", () => tap(x, y));
+    boardEl.appendChild(d);
+  }
+  document.getElementById("turn").textContent = turn;
+  const healed = grid.filter(t => t === "healed").length;
+  document.getElementById("score").textContent = Math.round(healed / grid.length * 100);
+}
+
+// ---- 移動 ----
+function passable(u, x, y) {
+  const t = grid[idx(x, y)];
+  if (unitAt(x, y)) return false;
+  // アリは 荒地に 入れない（弱い）。カブトムシだけ 入れる（単独で つよい）。
+  if (t === "blight") return u.type === "kabuto";
+  return true;
+}
+
+function reachable(u) {
+  const seen = new Map([[idx(u.x, u.y), 0]]);
+  const q = [[u.x, u.y, 0]];
+  const out = [];
+  while (q.length) {
+    const [x, y, d] = q.shift();
+    if (d >= SPECIES[u.type].move) continue;
+    for (const [nx, ny] of N4(x, y)) {
+      const k = idx(nx, ny);
+      if (seen.has(k) || !passable(u, nx, ny)) continue;
+      seen.set(k, d + 1);
+      out.push(k);
+      q.push([nx, ny, d + 1]);
+    }
+  }
+  return out;
+}
+
+function tap(x, y) {
+  if (over) return;
+  const u = unitAt(x, y);
+
+  if (sel && moves.includes(idx(x, y))) {
+    doMove(sel, x, y);
+    sel = null; moves = [];
+    draw();
+    return;
+  }
+  if (u && u.team === "player" && SPECIES[u.type].move > 0 && !u.acted) {
+    sel = u;
+    moves = reachable(u);
+    banner(SPECIES[u.type].name + "。" + (u.type === "kabuto"
+      ? "単独で つよい。むらさきの 荒地を たがやせるよ。"
+      : "みんなで うごく虫。3びき ならぶと ぎょうれつに なるよ。"));
+    draw();
+    return;
+  }
+  if (u && u.type === "mound") banner("アリづか。まいはる あたらしい アリが うまれて、まわりの 荒地を ふせぐよ。");
+  if (u && u.type === "inv") banner("アルゼンチンアリ（外来種）。ほうっておくと 森を 荒地に かえてしまう。2つ以上の 群れで かこむと おいかえせる。");
+  if (u && u.type === "invnest") banner("外来種の 巣。群れの力 5 いじょうで かこむと、あきらめて ひっこしていくよ。");
+  sel = null; moves = [];
+  draw();
+}
+
+function doMove(u, x, y) {
+  u.x = x; u.y = y; u.acted = true;
+
+  // 土地への はたらきかけ
+  const k = idx(x, y);
+  if (u.type === "kabuto") {
+    if (grid[k] === "blight") { grid[k] = "wild"; banner("カブトムシが 荒地を たがやした！ アリが 通れるように なったよ。"); }
+  } else {
+    if (grid[k] === "wild") grid[k] = "healed";
+    // ぎょうれつは まわりも いっしょに みどりに もどす（群れの力）
+    if (u.type === "ret") for (const [nx, ny] of N4(x, y)) if (grid[idx(nx, ny)] === "wild") grid[idx(nx, ny)] = "healed";
+  }
+
+  tryMerge(u);
+}
+
+// ---- マージ（群れの 成長） ----
+function tryMerge(u) {
+  const next = MERGE_NEXT[u.type];
+  if (!next) return;
+
+  // 同じ 種類・同じ 段階の 味方が、つながって 3ついるか
+  const group = [];
+  const seen = new Set();
+  const q = [u];
+  seen.add(u.id);
+  while (q.length) {
+    const c = q.pop();
+    group.push(c);
+    for (const [nx, ny] of N4(c.x, c.y)) {
+      const o = unitAt(nx, ny);
+      if (o && !seen.has(o.id) && o.team === "player" && o.type === u.type) { seen.add(o.id); q.push(o); }
+    }
+  }
+  if (group.length < 3) return;
+
+  // 動かした 1匹の 場所に あつまる。3匹だけ つかう（のこりは そのまま）
+  const used = [u, ...group.filter(g => g !== u).slice(0, 2)];
+  for (const g of used) units.splice(units.indexOf(g), 1);
+  const m = spawn(next, "player", u.x, u.y);
+  m.acted = true;
+  grid[idx(u.x, u.y)] = "healed";
+
+  banner(next === "ret"
+    ? "🐜🐜🐜 → ぎょうれつに なった！ 群れは 1匹より ずっと つよい。"
+    : "ぎょうれつが あつまって アリづかに なった！ ここは もう 荒地に ならないよ。");
+  tryMerge(m); // ぎょうれつが 3つ そろったら つづけて づかに
+}
+
+// ---- ターン ----
+document.getElementById("endturn").addEventListener("click", () => {
+  if (over) return;
+  sel = null; moves = [];
+
+  pushBack();     // かこんだ 外来種を おいかえす
+  enemyPhase();   // 外来種の ばん
+  if (checkEnd()) { draw(); return; }
+
+  turn++;
+  for (const u of units) u.acted = false;
+  moundPhase();   // アリづかの めぐみ
+  banner(turn + "ばんめの はる。アリを うごかそう。");
+  draw();
+});
+
+// まわりの 群れの力の ごうけい
+function powerAround(x, y) {
+  let p = 0;
+  for (const [nx, ny] of N4(x, y)) {
+    const o = unitAt(nx, ny);
+    if (o && o.team === "player" && TIER[o.type]) p += TIER[o.type];
+  }
+  return p;
+}
+
+function pushBack() {
+  for (const e of [...units]) {
+    if (e.team !== "enemy") continue;
+    const p = powerAround(e.x, e.y);
+    if (e.type === "inv" && p >= 2) {
+      units.splice(units.indexOf(e), 1);
+      banner("かこまれた アルゼンチンアリは にげていった！（たたかわずに おいかえした）");
+    }
+    if (e.type === "invnest" && p >= 5) {
+      units.splice(units.indexOf(e), 1);
+      grid[idx(e.x, e.y)] = "wild";
+      banner("外来種の 巣が ひっこしていった！ 森が しずかに なっていく…");
+    }
+  }
+}
+
+function enemyPhase() {
+  // 巣が 2はるに 1回 なかまを ふやす
+  for (const n of units.filter(u => u.type === "invnest")) {
+    const kids = units.filter(u => u.type === "inv").length;
+    if (turn % 2 === 1 && kids < 4) {
+      const spot = N4(n.x, n.y).find(([x, y]) => !unitAt(x, y));
+      if (spot) spawn("inv", "enemy", spot[0], spot[1]);
+    }
+  }
+  // 外来アリは 女王の巣へ むかい、通った あとを 荒地に かえる
+  for (const e of units.filter(u => u.type === "inv")) {
+    for (let step = 0; step < SPECIES.inv.move; step++) {
+      const cands = N4(e.x, e.y).filter(([x, y]) => !unitAt(x, y) && !isProtected(x, y));
+      if (!cands.length) break;
+      cands.sort((a, b) => dist(a, queen) - dist(b, queen));
+      [e.x, e.y] = cands[0];
+    }
+    if (!isProtected(e.x, e.y)) grid[idx(e.x, e.y)] = "blight";
+  }
+  // 荒地は じわじわ 広がる（アリづかの まわりには 広がれない）
+  const blights = [];
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (grid[idx(x, y)] === "blight") blights.push([x, y]);
+  if (blights.length) {
+    const [bx, by] = blights[Math.floor(Math.random() * blights.length)];
+    const cand = N4(bx, by).filter(([x, y]) => grid[idx(x, y)] === "wild" && !isProtected(x, y));
+    if (cand.length) {
+      const [x, y] = cand[Math.floor(Math.random() * cand.length)];
+      grid[idx(x, y)] = "blight";
+    }
+  }
+}
+
+const dist = ([x, y], q) => Math.abs(x - q.x) + Math.abs(y - q.y);
+
+// アリづかの まもり: となりには 荒地が こない・外来アリも 入れない
+function isProtected(x, y) {
+  return units.some(u => u.type === "mound" && Math.abs(u.x - x) <= 1 && Math.abs(u.y - y) <= 1);
+}
+
+function moundPhase() {
+  for (const m of units.filter(u => u.type === "mound")) {
+    // まわりの 荒地を 1マス なおす
+    const bad = N4(m.x, m.y).find(([x, y]) => grid[idx(x, y)] !== "healed");
+    if (bad) grid[idx(bad[0], bad[1])] = "healed";
+    // アリを 1匹 うむ（ふえすぎない ように 8匹まで）
+    if (units.filter(u => u.type === "ant").length < 8) {
+      const spot = N4(m.x, m.y).find(([x, y]) => grid[idx(x, y)] === "healed" && !unitAt(x, y));
+      if (spot) spawn("ant", "player", spot[0], spot[1]);
+    }
+  }
+}
+
+function checkEnd() {
+  if (!units.some(u => u.type === "invnest")) {
+    over = true;
+    showEnd("もりを とりもどした！", "外来種の 巣は みんな ひっこしていった。アリも カブトムシも、それぞれの くらしに もどっていくよ。むしは 群れの力で、たたかわずに すみかを まもれるんだ。");
+    return true;
+  }
+  const danger = N4(queen.x, queen.y).some(([x, y]) => {
+    const o = unitAt(x, y);
+    return o && o.team === "enemy";
+  }) || grid[idx(queen.x, queen.y)] === "blight";
+  if (danger) {
+    over = true;
+    showEnd("女王アリの 巣が あぶない…", "外来種に すみかを うばわれてしまった。こんどは アリづかを はやめに つくって、まもりを かためてみよう。");
+    return true;
+  }
+  return false;
+}
+
+function showEnd(title, body) {
+  document.getElementById("m-title").textContent = title;
+  document.getElementById("m-body").textContent = body;
+  document.getElementById("modal").classList.remove("hidden");
+}
+document.getElementById("m-btn").addEventListener("click", () => location.reload());
+
+// 自動テストから のぞく 入り口
+if (new URLSearchParams(location.search).has("e2e")) {
+  window.__e2e = { grid, units, get turn() { return turn; }, get over() { return over; }, tap, doMove, W, H };
+}
+
+draw();
+</script>
+</body>
+</html>

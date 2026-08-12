@@ -27,16 +27,24 @@
     font-family:"Hiragino Maru Gothic ProN","BIZ UDGothic",sans-serif;
     user-select:none; -webkit-user-select:none;
     min-height:100dvh; display:flex; flex-direction:column; align-items:center;
-    touch-action:none;
+    /* スクロールは 殺さない。盤は 画面に おさめる 設計にし、
+       ドラッグ中の 誤スクロールは 虫（.u）側の touch-action:none で ふせぐ */
+    touch-action:manipulation;
   }
   #goal {
-    width:100%; max-width:430px; padding:max(8px,env(safe-area-inset-top)) 12px 2px;
-    font-size:13px; color:#b9d391;
+    width:100%; max-width:430px; padding:max(6px,env(safe-area-inset-top)) 12px 2px;
+    font-size:12px; color:#b9d391;
+    display:flex; align-items:center; gap:8px; white-space:nowrap; overflow:hidden;
+  }
+  #goal span { overflow:hidden; text-overflow:ellipsis; }
+  #restart {
+    margin-left:auto; flex:0 0 auto; font:inherit; font-size:12px;
+    background:#33452a; color:#eef4e0; border:1px solid #56704a; border-radius:8px; padding:3px 8px;
   }
   #goal b { color:#ffe27a; }
   #banner {
-    width:100%; max-width:430px; min-height:46px; padding:4px 12px 6px;
-    font-size:14px; line-height:1.5;
+    width:100%; max-width:430px; min-height:40px; padding:2px 12px 4px;
+    font-size:13px; line-height:1.45;
   }
   #board { position:relative; border-radius:12px; background:#0f150a; padding:5px; }
   #tiles { display:grid; gap:2px; }
@@ -61,6 +69,7 @@
     font-size:calc(var(--ts)*.66); line-height:1;
     filter:drop-shadow(0 2px 1px rgba(0,0,0,.5));
     pointer-events:auto; transition:left .12s, top .12s;
+    touch-action:none;
   }
   .u .badge {
     position:absolute; right:-2px; bottom:-2px; font-size:10px; font-weight:800;
@@ -77,12 +86,15 @@
   @keyframes fly { to { transform:translate(var(--dx),var(--dy)) scale(.3); opacity:0; } }
 
   #tut {
-    position:fixed; left:50%; bottom:calc(14px + env(safe-area-inset-bottom)); transform:translateX(-50%);
-    width:min(92vw,400px); background:#26331e; border:2px solid #8fd06a; border-radius:14px;
-    padding:12px 14px; font-size:15px; line-height:1.6; z-index:60;
-    box-shadow:0 6px 24px rgba(0,0,0,.5);
+    width:calc(100% - 16px); max-width:414px; background:#26331e; border:2px solid #8fd06a;
+    border-radius:12px; padding:8px 10px; margin:0 8px 6px; font-size:13px; line-height:1.5;
+    display:flex; align-items:center; gap:10px;
   }
   #tut.hidden { display:none; }
+  #tut-skip {
+    flex:0 0 auto; font:inherit; font-size:12px; background:#33452a; color:#cfe8ac;
+    border:1px solid #56704a; border-radius:8px; padding:4px 8px;
+  }
   #modal { position:fixed; inset:0; background:rgba(8,12,6,.75); display:flex; align-items:center; justify-content:center; padding:22px; z-index:70; }
   #modal.hidden { display:none; }
   #modal .box { background:#26331e; border:2px solid #56704a; border-radius:16px; padding:20px; max-width:340px; line-height:1.7; font-size:15px; }
@@ -91,10 +103,10 @@
 </style>
 </head>
 <body>
-<div id="goal">めあて: マージで もりを ひろげて、<b>あいての 巣🕳️まで たどりつこう</b></div>
+<div id="goal"><span>めあて: <b>あいての 巣🕳️まで もりを ひろげよう</b></span><button id="restart">はじめから</button></div>
 <div id="banner"></div>
+<div id="tut" class="hidden"><span id="tut-text"></span><button id="tut-skip">とばす</button></div>
 <div id="board"><div id="tiles"></div><div id="units"></div></div>
-<div id="tut" class="hidden"></div>
 <div id="modal" class="hidden"><div class="box"><h2 id="m-title"></h2><p id="m-body"></p><button onclick="location.reload()">もういちど あそぶ</button></div></div>
 
 <script>
@@ -170,20 +182,32 @@ const sndFight = () => beep(120, .12, "square", .10);
 const sndFind  = () => { [523,659,784,1046].forEach((f,i) => beep(f, .14, "triangle", .13, i * .07)); };
 
 // ================= 見た目 =================
-const ts = Math.min(46, Math.floor((Math.min(innerWidth, 430) - 26) / W));
-document.documentElement.style.setProperty("--ts", ts + "px");
+// 幅と 高さの 両方から きめる。実機の 1回目の テストで、
+// 幅だけで きめた 盤が 画面に おさまらず、女王づかが 画面の そとに 出て
+// 何も できないまま 敵だけ 育つ、という 事故が 起きた。
 const tilesEl = document.getElementById("tiles");
 const unitsEl = document.getElementById("units");
-tilesEl.style.gridTemplateColumns = `repeat(${W}, ${ts}px)`;
+function fitTile() {
+  const top = document.getElementById("board").getBoundingClientRect().top;
+  const availH = innerHeight - top - 12;
+  const byW = Math.floor((Math.min(innerWidth, 430) - 26) / W);
+  const byH = Math.floor((availH - 10 - 2 * (H - 1)) / H);
+  return Math.max(22, Math.min(46, byW, byH));
+}
+let ts = 36;
+function applyTile() {
+  ts = fitTile();
+  document.documentElement.style.setProperty("--ts", ts + "px");
+  tilesEl.style.gridTemplateColumns = `repeat(${W}, ${ts}px)`;
+}
 const bannerEl = document.getElementById("banner");
 const banner = (t) => { bannerEl.textContent = t; };
 
 let dragging = null;
-let dirty = false;
 const flash = new Set();
 
 function draw() {
-  if (dragging) { dirty = true; return; } // ドラッグ中は 盤を 作り直さない
+  if (dragging) return; // ドラッグ中は 盤を 作り直さない（おろした ときに 描きなおす）
   tilesEl.innerHTML = "";
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
     const t = tiles[idx(x, y)];
@@ -339,7 +363,6 @@ document.addEventListener("pointerup", (ev) => {
       tutEvent("moved");
     }
   }
-  if (dirty) { dirty = false; }
   draw();
 });
 
@@ -380,9 +403,9 @@ setInterval(() => {
   for (const u of kids) if (mergeCheck(u)) break;
 
   // まえに すすむ（くさむらは ひらいて 陣地に かえながら）。
-  // はじめの 20秒ほどは 自分の 陣地で そだつだけ。
-  // チュートリアルの あいだに 攻めこまれると、子供は 何も できずに まける。
-  if (enemyStep < 8) { draw(); return; }
+  // プレイヤーが 1回 マージするまでは 自分の 陣地で そだつだけ（上限 約50秒）。
+  // 実機テスト1回目で「何も できないうちに 敵だけ せまってくる」が 起きたため。
+  if (enemyStep < 8 || (mergesDone === 0 && enemyStep < 20)) { draw(); return; }
   const walkers = kids.sort((a, b) => b.y - a.y).slice(0, 3);
   for (const u of walkers) {
     const cands = N4(u.x, u.y)
@@ -479,11 +502,13 @@ const TUT = [
 ];
 let tutStep = 0;
 function showTut() {
-  if (tutStep >= TUT.length) { tutEl.classList.add("hidden"); return; }
-  tutEl.textContent = TUT[tutStep].text;
+  if (tutStep >= TUT.length) { tutEl.classList.add("hidden"); applyTile(); draw(); return; }
+  document.getElementById("tut-text").textContent = TUT[tutStep].text;
   tutEl.classList.remove("hidden");
   if (TUT[tutStep].timeout) setTimeout(() => { if (tutStep < TUT.length) { tutStep = TUT.length; showTut(); } }, TUT[tutStep].timeout);
 }
+document.getElementById("tut-skip").addEventListener("click", () => { tutStep = TUT.length; showTut(); });
+document.getElementById("restart").addEventListener("click", () => location.reload());
 function tutEvent(e) {
   if (tutStep >= TUT.length) return;
   if (TUT[tutStep].done(e)) { tutStep++; showTut(); }
@@ -496,7 +521,9 @@ function tutEvent(e) {
 
 banner("むらさきの 外来種から、みどりの もりを とりもどそう。");
 showTut();
+applyTile();
 draw();
+addEventListener("resize", () => { applyTile(); draw(); });
 
 // e2e 用の のぞき口
 if (new URLSearchParams(location.search).has("e2e")) {

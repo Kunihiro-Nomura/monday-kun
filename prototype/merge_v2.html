@@ -103,6 +103,16 @@
     content:""; position:absolute; inset:-2px; border-radius:50%;
     border:2px solid rgba(255,226,122,.85);
   }
+  /* タップで マージ できる かたまり */
+  .u.can3 { animation:can3 1s ease-in-out infinite; }
+  @keyframes can3 { 50% { filter:drop-shadow(0 0 7px #8fd06a) brightness(1.12); } }
+  .u.can5 { animation:can5 .7s ease-in-out infinite; }
+  @keyframes can5 { 50% { transform:scale(1.1); filter:drop-shadow(0 0 10px #ffe27a) brightness(1.25); } }
+  .u .cluster {
+    position:absolute; left:-4px; top:-4px; font-size:10px; font-weight:800;
+    background:#8fd06a; color:#12210c; border-radius:8px; padding:0 4px; border:1px solid #17250f;
+  }
+  .u.can5 .cluster { background:#ffe27a; }
   /* かりとり中は もぐもぐ ゆれる */
   .u.harvest { animation:chew .5s ease-in-out infinite; }
   @keyframes chew { 50% { transform:rotate(9deg) scale(1.06); } }
@@ -247,25 +257,27 @@ function draw() {
   }
   flash.clear();
 
-  // 「あと1つで マージ」の 2つ組を 光らせる
-  const readyIds = new Set();
+  // かたまりの 大きさを 見せる。3つ以上は「タップで マージ できる」あいず。
+  const readyIds = new Set();   // あと1つで 3つに なる
+  const clusterN = new Map();   // id → かたまりの 数（3つ以上のみ）
+  const counted = new Set();
   for (const u of units) {
-    if (u.side !== "p" || !SPEC[u.type].next) continue;
-    let n = 0;
-    for (const [nx, ny] of N4(u.x, u.y)) {
-      const o = unitAt(nx, ny);
-      if (o && o.side === "p" && o.type === u.type) n++;
-    }
-    if (n >= 1) readyIds.add(u.id); // なかまと ならんだ虫は 光って「あと1つ」を しらせる
+    if (u.side !== "p" || !SPEC[u.type].next || counted.has(u.id)) continue;
+    const g = clusterOf(u);
+    for (const m of g) counted.add(m.id);
+    if (g.length >= 3) for (const m of g) clusterN.set(m.id, g.length);
+    else if (g.length === 2) for (const m of g) readyIds.add(m.id);
   }
 
   unitsEl.innerHTML = "";
   for (const u of units) {
     const s = SPEC[u.type];
     const d = document.createElement("div");
+    const cn = clusterN.get(u.id) || 0;
     d.className = `u t-${u.type}` + (u.side === "e" ? " e" : "") + (u.pop ? " pop" : "")
       + (readyIds.has(u.id) ? " ready" : "") + (u.harvest ? " harvest" : "")
-      + (u.hold && Date.now() < u.hold ? " hold" : "");
+      + (u.hold && Date.now() < u.hold ? " hold" : "")
+      + (cn >= 5 ? " can5" : cn >= 3 ? " can3" : "");
     u.pop = false;
     d.style.left = u.x * (ts + 2) + "px";
     d.style.top  = u.y * (ts + 2) + "px";
@@ -275,6 +287,12 @@ function draw() {
       b.className = "badge";
       b.textContent = s.power;
       d.appendChild(b);
+    }
+    if (cn >= 3) {
+      const c = document.createElement("span");
+      c.className = "cluster";
+      c.textContent = cn >= 5 ? "5★" : cn;
+      d.appendChild(c);
     }
     if (s.crown) {
       const c = document.createElement("span");
@@ -324,6 +342,20 @@ function claimAround(cx, cy, side) {
 }
 
 // ================= マージ =================
+// つながっている 同じ格の かたまりを かえす
+function clusterOf(u) {
+  const g = [], seen = new Set([u.id]), q = [u];
+  while (q.length) {
+    const c = q.pop();
+    g.push(c);
+    for (const [nx, ny] of N4(c.x, c.y)) {
+      const o = unitAt(nx, ny);
+      if (o && !seen.has(o.id) && o.side === u.side && o.type === u.type) { seen.add(o.id); q.push(o); }
+    }
+  }
+  return g;
+}
+
 function mergeCheck(u) {
   const next = SPEC[u.type].next;
   if (!next) return false;
@@ -340,6 +372,10 @@ function mergeCheck(u) {
     }
   }
   if (group.length < 3) return false;
+  // 味方は **タップするまで マージしない**。
+  // 3で ためるか、5まで 待って ボーナスを ねらうかは プレイヤーが きめる。
+  // ここを 自動に していたので、いちばん おもしろい 判断が 消えていた（社長のご指摘）。
+  if (u.side === "p" && !u.byTap) return false;
 
   const five = group.length >= 5;
   const used = [u, ...group.filter(g => g !== u).slice(0, five ? 4 : 2)];
@@ -369,8 +405,21 @@ function mergeCheck(u) {
     }
     tutEvent("merge");
   }
-  for (const b of born) mergeCheck(b);
+  for (const b of born) { b.byTap = u.byTap; mergeCheck(b); b.byTap = false; }
   return true;
+}
+
+// タップで マージを 発火する
+function tapMerge(u) {
+  const g = clusterOf(u);
+  if (g.length < 3) {
+    banner(`まだ ${g.length}つ。おなじ 虫を 3つ ならべると マージ できるよ（5つなら ボーナス！）`);
+    return false;
+  }
+  u.byTap = true;
+  const done = mergeCheck(u);
+  u.byTap = false;
+  return done;
 }
 
 // ================= かりとり（くさむらを へらす） =================
@@ -478,7 +527,6 @@ function stepForward(u) {
   const [nx, ny] = cands[0];
   if (Math.abs(nx - goal.x) + Math.abs(ny - goal.y) >= goal.d) return;
   u.x = nx; u.y = ny;
-  mergeCheck(u); // 近づいた さきで そろっていれば その場で マージ
 }
 
 // 400ミリ秒ごとに、となりに くさむらが ある虫を もぐもぐ させる
@@ -527,7 +575,7 @@ document.addEventListener("pointerdown", (ev) => {
   if (SPEC[u.type].gen) { tapGen(u); return; }
   u.harvest = false; u.aim = null;
 
-  dragging = { u, el };
+  dragging = { u, el, from: { x: u.x, y: u.y }, t0: Date.now() };
   el.style.opacity = ".25";
   ghost.textContent = SPEC[u.type].emoji;
   document.body.appendChild(ghost);
@@ -539,6 +587,7 @@ function moveGhost(ev) { ghost.style.left = ev.clientX + "px"; ghost.style.top =
 document.addEventListener("pointerup", (ev) => {
   if (!dragging) return;
   const { u, el } = dragging;
+  const dragged = dragging;
   dragging = null;
   ghost.remove();
   el.style.opacity = "";
@@ -546,6 +595,14 @@ document.addEventListener("pointerup", (ev) => {
   const r = tilesEl.getBoundingClientRect();
   const x = Math.floor((ev.clientX - r.left) / (ts + 2));
   const y = Math.floor((ev.clientY - r.top) / (ts + 2));
+
+  // 同じマスで はなしたら「タップ」＝ マージの 合図
+  if (x === dragged.from.x && y === dragged.from.y) {
+    tapMerge(u);
+    draw();
+    return;
+  }
+
   if (inB(x, y) && !unitAt(x, y)) {
     const t = tiles[idx(x, y)];
     if (!t.locked && t.owner !== "e") {
@@ -553,7 +610,10 @@ document.addEventListener("pointerup", (ev) => {
       // 手で おいた 虫は 8秒 その場で まつ。
       // すぐ 歩いて いってしまうと、3つ ならべる ひまが ない（社長のご指摘）。
       u.hold = Date.now() + 8000;
-      if (!mergeCheck(u)) beep(440, .04, "sine", .05);
+      beep(440, .04, "sine", .05);
+      const n = clusterOf(u).length;
+      if (n >= 5) banner("⭐ 5つ そろった！ タップすると 2体 うまれる ボーナスマージ！");
+      else if (n >= 3) banner(`${n}つ そろった。タップで マージ／もう ${5 - n}つ ならべると ボーナス！`);
     } else if (t.locked && canHarvest(u)) {
       // くさむらの となりに じぶんの 陣地が あれば、そこへ 出て かりとりを はじめる。
       // すでに となりに 立っているなら 動かない（足場を 自分で ふさいで しまうため）。
@@ -724,10 +784,10 @@ function showEnd(t, b) {
 const tutEl = document.getElementById("tut");
 const TUT = [
   { text: "👑⛰️を タップ → 🥚が うまれる。づかは じかんでも かってに 🥚を うむよ。", done: (e) => e === "egg" },
-  { text: "🥚を ドラッグして 3つ ならべよう。3つで 🐜、5つ ならべると 2体 うまれて おとく！", done: (e) => e === "merge" },
+  { text: "🥚を 3つ ならべたら **タップ**！ 5つ ならべてから タップすると 2体 うまれる ボーナス！", done: (e) => e === "merge" },
   { text: "🐜を 🌿くさむらの そばに おこう。**かってに かりとって** もりが ひろがるよ。🥚や 🟤も 見つかる！", done: (e) => e === "harvest" },
   { text: "🟤つちのやまを 3つ あつめると ⛰️アリづか！ づかが ふえるほど 🥚の 増産が はやくなる。", done: (e) => e === "mound", timeout: 25000 },
-  { text: "🐜は なかまが いる ほうへ 自分から あつまるよ。手で おいた 虫は しばらく そこで まつ。3つ そろえば 上の 格に！", done: () => false, timeout: 13000 },
+  { text: "🐜は なかまの ほうへ 自分から あつまる。でも **マージは タップするまで しない**。5つ ためると おとくだよ！", done: () => false, timeout: 13000 },
 ];
 let tutStep = 0;
 function showTut() {

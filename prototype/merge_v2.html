@@ -2,23 +2,21 @@
 <!-- Copyright (c) 2026 Kunihiro Nomura. All rights reserved. -->
 <!-- 昆虫戦争 (Konchu Senso) — 無断複製・改変・再配布を禁じます。詳細は /LICENSE を参照。 -->
 <!--
-  マージ×陣取り 試作2。試作1への 社長評「爽快感がない・ゴールが不明・子供には無理」への 作り直し。
+  マージ×陣取り 試作3（ファイル名は v2 のまま。URLを 変えないため）。
 
-  v1からの 変更:
-  - ターン制を すてて リアルタイム＋ドラッグ操作（Merge Dragons と同じ 手ざわり）
-  - 3つで マージ、5つで ボーナスマージ（上位が 2体 できる）
-  - 盤の まん中は「くさむら」（非アクティブマス）。マージの 近くだけ ひらいて 陣地になる
-  - 敵（外来種）も 同じルールで マージして 肥大化し、陣地を 広げて せまってくる
-  - ぶつかると 争い。同格なら 数で 勝敗、上の 格なら 少数でも 圧倒
-  - カブトムシは 一騎当千。くさむらの 光るマスに ねむっている
-  - チュートリアルを 最初に 入れる
+  試作2への 社長評と 対応:
+  - 「へい」バッジが 分からない → 格が 上がると 大きさ・色が 変わり、つよさを 数字で 出す
+  - 陣地が 広がる 理屈が 不明   → マージの まわりが ひらく ことを 演出と 説明で 見せる
+  - 草を 減らす 方法が 不明     → アリを 🌿に おくと「かりとる」。ごほうびに 🥚や 🟤が 出る
+  - アリ塚を 増やす 仕組みが ない → 🟤つちのやま×3 → ⛰️アリづか。づかは 時間で 🥚を 増産
+  - もっと Merge Dragons ふうに → さわらなくても 生産が 回り、マージ待ちの 2つは 光って さそう
 -->
 <html lang="ja">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no, viewport-fit=cover">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>🐜</text></svg>">
-<title>むしの もり（マージ陣取り 試作2）</title>
+<title>むしの もり（マージ陣取り 試作3）</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
   html, body { overscroll-behavior:none; }
@@ -27,8 +25,6 @@
     font-family:"Hiragino Maru Gothic ProN","BIZ UDGothic",sans-serif;
     user-select:none; -webkit-user-select:none;
     min-height:100dvh; display:flex; flex-direction:column; align-items:center;
-    /* スクロールは 殺さない。盤は 画面に おさめる 設計にし、
-       ドラッグ中の 誤スクロールは 虫（.u）側の touch-action:none で ふせぐ */
     touch-action:manipulation;
   }
   #goal {
@@ -37,14 +33,24 @@
     display:flex; align-items:center; gap:8px; white-space:nowrap; overflow:hidden;
   }
   #goal span { overflow:hidden; text-overflow:ellipsis; }
+  #goal b { color:#ffe27a; }
   #restart {
     margin-left:auto; flex:0 0 auto; font:inherit; font-size:12px;
     background:#33452a; color:#eef4e0; border:1px solid #56704a; border-radius:8px; padding:3px 8px;
   }
-  #goal b { color:#ffe27a; }
   #banner {
-    width:100%; max-width:430px; min-height:40px; padding:2px 12px 4px;
+    width:100%; max-width:430px; min-height:38px; padding:2px 12px 4px;
     font-size:13px; line-height:1.45;
+  }
+  #tut {
+    width:calc(100% - 16px); max-width:414px; background:#26331e; border:2px solid #8fd06a;
+    border-radius:12px; padding:8px 10px; margin:0 8px 6px; font-size:13px; line-height:1.5;
+    display:flex; align-items:center; gap:10px;
+  }
+  #tut.hidden { display:none; }
+  #tut-skip {
+    flex:0 0 auto; font:inherit; font-size:12px; background:#33452a; color:#cfe8ac;
+    border:1px solid #56704a; border-radius:8px; padding:4px 8px;
   }
   #board { position:relative; border-radius:12px; background:#0f150a; padding:5px; }
   #tiles { display:grid; gap:2px; }
@@ -59,42 +65,47 @@
   .tile.locked.alt { background:#33421f; }
   .tile.locked::after { content:"🌿"; position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:calc(var(--ts)*.5); opacity:.8; }
   .tile.sparkle.locked::after { content:"✨"; }
-  .tile.claimflash { animation:claim .5s ease-out; }
-  @keyframes claim { from { filter:brightness(2.2); } to { filter:none; } }
+  .tile.claimflash { animation:claim .55s ease-out; }
+  @keyframes claim { 0% { filter:brightness(2.4); } 100% { filter:none; } }
 
   #units { position:absolute; inset:5px; pointer-events:none; }
   .u {
     position:absolute; width:var(--ts); height:var(--ts);
     display:flex; align-items:center; justify-content:center;
-    font-size:calc(var(--ts)*.66); line-height:1;
+    line-height:1;
     filter:drop-shadow(0 2px 1px rgba(0,0,0,.5));
     pointer-events:auto; transition:left .12s, top .12s;
     touch-action:none;
   }
+  /* ---- 格ごとの 見た目: 大きさと 色が 変わる ---- */
+  .t-egg     { font-size:calc(var(--ts)*.5); }
+  .t-worker  { font-size:calc(var(--ts)*.56); }
+  .t-soldier { font-size:calc(var(--ts)*.78); filter:hue-rotate(-25deg) saturate(1.8) brightness(1.05) drop-shadow(0 2px 1px rgba(0,0,0,.5)); }
+  .t-major   { font-size:calc(var(--ts)*.95); filter:hue-rotate(-45deg) saturate(2.2) brightness(.85) contrast(1.15) drop-shadow(0 2px 2px rgba(0,0,0,.6)); }
+  .t-kabuto  { font-size:calc(var(--ts)*.92); }
+  .t-dirt    { font-size:calc(var(--ts)*.5); }
+  .t-moundS  { font-size:calc(var(--ts)*.62); }
+  .t-queen, .t-nest { font-size:calc(var(--ts)*.8); }
+
   .u .badge {
-    position:absolute; right:-2px; bottom:-2px; font-size:10px; font-weight:800;
-    background:#243318; color:#cfe8ac; border:1px solid #56704a; border-radius:8px; padding:0 3px;
+    position:absolute; right:-3px; bottom:-3px; font-size:11px; font-weight:800;
+    background:#243318; color:#ffe27a; border:1px solid #56704a; border-radius:8px; padding:0 4px;
   }
   .u.e .badge { background:#3d1f2c; color:#ffc9c9; border-color:#8a4a55; }
+  .u .crown { position:absolute; left:-3px; top:-6px; font-size:13px; }
   .u.pop { animation:pop .4s ease-out; }
-  @keyframes pop { 0% { transform:scale(.3); } 60% { transform:scale(1.35); } 100% { transform:scale(1); } }
-  .u.gen { font-size:calc(var(--ts)*.8); }
-  .u.dying { animation:die .3s ease-in forwards; }
-  @keyframes die { to { transform:scale(.2) rotate(40deg); opacity:0; } }
+  @keyframes pop { 0% { transform:scale(.3); } 60% { transform:scale(1.4); } 100% { transform:scale(1); } }
+  /* あと1つで マージ できる 2つ組は 光って さそう */
+  .u.ready { animation:ready 1.1s ease-in-out infinite; }
+  @keyframes ready { 50% { transform:scale(1.14); filter:drop-shadow(0 0 6px #ffe27a); } }
+  /* かりとり中は もぐもぐ ゆれる */
+  .u.harvest { animation:chew .5s ease-in-out infinite; }
+  @keyframes chew { 50% { transform:rotate(9deg) scale(1.06); } }
+
   #ghost { position:fixed; pointer-events:none; font-size:34px; z-index:50; transform:translate(-50%,-60%); filter:drop-shadow(0 3px 3px rgba(0,0,0,.6)); }
   .spark { position:absolute; pointer-events:none; font-size:14px; animation:fly .6s ease-out forwards; z-index:40; }
   @keyframes fly { to { transform:translate(var(--dx),var(--dy)) scale(.3); opacity:0; } }
 
-  #tut {
-    width:calc(100% - 16px); max-width:414px; background:#26331e; border:2px solid #8fd06a;
-    border-radius:12px; padding:8px 10px; margin:0 8px 6px; font-size:13px; line-height:1.5;
-    display:flex; align-items:center; gap:10px;
-  }
-  #tut.hidden { display:none; }
-  #tut-skip {
-    flex:0 0 auto; font:inherit; font-size:12px; background:#33452a; color:#cfe8ac;
-    border:1px solid #56704a; border-radius:8px; padding:4px 8px;
-  }
   #modal { position:fixed; inset:0; background:rgba(8,12,6,.75); display:flex; align-items:center; justify-content:center; padding:22px; z-index:70; }
   #modal.hidden { display:none; }
   #modal .box { background:#26331e; border:2px solid #56704a; border-radius:16px; padding:20px; max-width:340px; line-height:1.7; font-size:15px; }
@@ -103,7 +114,7 @@
 </style>
 </head>
 <body>
-<div id="goal"><span>めあて: <b>あいての 巣🕳️まで もりを ひろげよう</b></span><button id="restart">はじめから</button></div>
+<div id="goal"><span>めあて: <b>あいての 巣🕳️まで もりを ひろげよう</b>　数字は つよさ</span><button id="restart">はじめから</button></div>
 <div id="banner"></div>
 <div id="tut" class="hidden"><span id="tut-text"></span><button id="tut-skip">とばす</button></div>
 <div id="board"><div id="tiles"></div><div id="units"></div></div>
@@ -114,15 +125,13 @@
 
 // ================= 盤 =================
 const W = 9, H = 14;
-// tile: { owner:'p'|'e'|null, locked:bool, sparkle:bool }
 const tiles = [];
 for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
   const t = { owner: null, locked: true, sparkle: false };
-  if (y >= H - 3) { t.owner = "p"; t.locked = false; }   // 自陣
-  if (y <= 2)     { t.owner = "e"; t.locked = false; }   // 敵陣
+  if (y >= H - 3) { t.owner = "p"; t.locked = false; }
+  if (y <= 2)     { t.owner = "e"; t.locked = false; }
   tiles.push(t);
 }
-// カブトムシが ねむる 光るマス（くさむらの 中）
 tiles[6 * W + 1].sparkle = true;
 tiles[8 * W + 7].sparkle = true;
 
@@ -130,25 +139,26 @@ const idx = (x, y) => y * W + x;
 const inB = (x, y) => x >= 0 && y >= 0 && x < W && y < H;
 const N4 = (x, y) => [[x+1,y],[x-1,y],[x,y+1],[x,y-1]].filter(([a,b]) => inB(a,b));
 
-// ================= 虫 =================
-// power: あらそいの 強さ。上の 格は 1体で 下を まとめて 圧倒できる 段差にしてある。
+// ================= 虫と もの =================
+// power: つよさ。画面にも この数字を そのまま 出す（バッジ）。
+// gen:   時間で 🥚を うむ 生産拠点。interval は うむ 間隔（ミリ秒）。
 const SPEC = {
-  egg:    { name:"たまご",          emoji:"🥚", power:0,  next:"worker"  },
-  worker: { name:"はたらきアリ",     emoji:"🐜", power:1,  next:"soldier" },
-  soldier:{ name:"へいたいアリ",     emoji:"🐜", power:4,  next:"major",  big:1.25 },
-  major:  { name:"おおあごへいたい", emoji:"🐜", power:16, next:null,     big:1.5  },
-  kabuto: { name:"カブトムシ",       emoji:"🪲", power:30, next:null,     big:1.4  },
-  queen:  { name:"女王アリづか",     emoji:"⛰️", power:3,  gen:"egg" },
-  nest:   { name:"外来種の 巣",      emoji:"🕳️", power:3,  gen:"worker" },
+  egg:    { name:"たまご",           emoji:"🥚", power:0,  next:"worker" },
+  worker: { name:"はたらきアリ",      emoji:"🐜", power:1,  next:"soldier" },
+  soldier:{ name:"へいたいアリ",      emoji:"🐜", power:4,  next:"major" },
+  major:  { name:"おおあごへいたい",  emoji:"🐜", power:16, next:null },
+  kabuto: { name:"カブトムシ",        emoji:"🪲", power:30, next:null },
+  dirt:   { name:"つちのやま",        emoji:"🟤", power:0,  next:"moundS" },
+  moundS: { name:"アリづか",          emoji:"⛰️", power:2,  gen:"egg", interval:6000 },
+  queen:  { name:"女王アリづか",      emoji:"⛰️", power:3,  gen:"egg", interval:5000, crown:true },
+  nest:   { name:"外来種の 巣",       emoji:"🕳️", power:3 },
 };
-const BADGE = { soldier:"へい", major:"大", kabuto:"強" };
 
-// unit: {id,type,side,x,y}
 const units = [];
 let nextId = 1;
 const unitAt = (x, y) => units.find(u => u.x === x && u.y === y);
 function spawn(type, side, x, y, pop = true) {
-  const u = { id: nextId++, type, side, x, y, pop };
+  const u = { id: nextId++, type, side, x, y, pop, nextAuto: Date.now() + (SPEC[type].interval || 0) };
   units.push(u);
   return u;
 }
@@ -157,12 +167,14 @@ const queen = spawn("queen", "p", 4, H - 2, false);
 const nest  = spawn("nest",  "e", 4, 1, false);
 spawn("egg", "p", 3, H - 2, false);
 spawn("egg", "p", 5, H - 2, false);
+spawn("dirt", "p", 2, H - 1, false); // つちのやまチェーンに 最初から 気づけるように 1つ おいておく
 
 let over = false;
 let mergesDone = 0;
-let merge5Done = false;
+// かりとりの ごほうび（e2e から 変えられるように 変数に）
+const drops = { egg: .4, dirt: .3 };
 
-// ================= 音（爽快感の 半分は 音） =================
+// ================= 音 =================
 let ac = null;
 function beep(freq, dur = .09, type = "triangle", gain = .12, when = 0) {
   try {
@@ -180,13 +192,14 @@ const sndMerge = (tier) => { [0,1,2].forEach(i => beep(330 * Math.pow(1.5, tier)
 const sndClaim = () => beep(880, .06, "sine", .07);
 const sndFight = () => beep(120, .12, "square", .10);
 const sndFind  = () => { [523,659,784,1046].forEach((f,i) => beep(f, .14, "triangle", .13, i * .07)); };
+const sndPop   = () => beep(660, .07, "triangle", .1);
 
 // ================= 見た目 =================
-// 幅と 高さの 両方から きめる。実機の 1回目の テストで、
-// 幅だけで きめた 盤が 画面に おさまらず、女王づかが 画面の そとに 出て
-// 何も できないまま 敵だけ 育つ、という 事故が 起きた。
 const tilesEl = document.getElementById("tiles");
 const unitsEl = document.getElementById("units");
+const bannerEl = document.getElementById("banner");
+const banner = (t) => { bannerEl.textContent = t; };
+
 function fitTile() {
   const top = document.getElementById("board").getBoundingClientRect().top;
   const availH = innerHeight - top - 12;
@@ -200,14 +213,12 @@ function applyTile() {
   document.documentElement.style.setProperty("--ts", ts + "px");
   tilesEl.style.gridTemplateColumns = `repeat(${W}, ${ts}px)`;
 }
-const bannerEl = document.getElementById("banner");
-const banner = (t) => { bannerEl.textContent = t; };
 
 let dragging = null;
 const flash = new Set();
 
 function draw() {
-  if (dragging) return; // ドラッグ中は 盤を 作り直さない（おろした ときに 描きなおす）
+  if (dragging) return;
   tilesEl.innerHTML = "";
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
     const t = tiles[idx(x, y)];
@@ -219,21 +230,39 @@ function draw() {
   }
   flash.clear();
 
+  // 「あと1つで マージ」の 2つ組を 光らせる
+  const readyIds = new Set();
+  for (const u of units) {
+    if (u.side !== "p" || !SPEC[u.type].next) continue;
+    let n = 0;
+    for (const [nx, ny] of N4(u.x, u.y)) {
+      const o = unitAt(nx, ny);
+      if (o && o.side === "p" && o.type === u.type) n++;
+    }
+    if (n === 1) readyIds.add(u.id);
+  }
+
   unitsEl.innerHTML = "";
   for (const u of units) {
     const s = SPEC[u.type];
     const d = document.createElement("div");
-    d.className = "u" + (u.side === "e" ? " e" : "") + (s.gen ? " gen" : "") + (u.pop ? " pop" : "");
+    d.className = `u t-${u.type}` + (u.side === "e" ? " e" : "") + (u.pop ? " pop" : "")
+      + (readyIds.has(u.id) ? " ready" : "") + (u.harvest ? " harvest" : "");
     u.pop = false;
     d.style.left = u.x * (ts + 2) + "px";
     d.style.top  = u.y * (ts + 2) + "px";
-    if (s.big) d.style.fontSize = `calc(var(--ts) * ${.66 * s.big})`;
     d.textContent = s.emoji;
-    if (BADGE[u.type]) {
+    if (s.power >= 1 && !s.gen && u.type !== "nest") {
       const b = document.createElement("span");
       b.className = "badge";
-      b.textContent = BADGE[u.type];
+      b.textContent = s.power;
       d.appendChild(b);
+    }
+    if (s.crown) {
+      const c = document.createElement("span");
+      c.className = "crown";
+      c.textContent = "👑";
+      d.appendChild(c);
     }
     d.dataset.id = u.id;
     unitsEl.appendChild(d);
@@ -255,29 +284,28 @@ function sparks(x, y) {
 }
 
 // ================= 陣地 =================
-// マージした まわり 3×3 を じぶんの 陣地にする。くさむらも ひらく。
+function wakeSparkle(t, x, y, side) {
+  if (!t.sparkle) return;
+  t.sparkle = false;
+  if (!unitAt(x, y)) {
+    spawn("kabuto", side, x, y);
+    sndFind();
+    if (side === "p") banner("✨ カブトムシが 目を さました！ つよさ30の 一騎当千だ！");
+  }
+}
+
 function claimAround(cx, cy, side) {
   for (let y = cy - 1; y <= cy + 1; y++) for (let x = cx - 1; x <= cx + 1; x++) {
     if (!inB(x, y)) continue;
     const t = tiles[idx(x, y)];
-    if (t.owner === (side === "p" ? "e" : "p")) continue; // 相手の 陣地は あらそいでしか うばえない
-    if (t.locked) {
-      t.locked = false;
-      // 光るマスから カブトムシが 目をさます（ひらいた 側の なかまに）
-      if (t.sparkle && !unitAt(x, y)) {
-        t.sparkle = false;
-        spawn("kabuto", side, x, y);
-        sndFind();
-        if (side === "p") banner("✨ カブトムシが 目を さました！ 一騎当千の ちからだ！");
-      }
-    }
+    if (t.owner === (side === "p" ? "e" : "p")) continue;
+    if (t.locked) { t.locked = false; wakeSparkle(t, x, y, side); }
     if (t.owner !== side) { t.owner = side; flash.add(idx(x, y)); }
   }
   sndClaim();
 }
 
 // ================= マージ =================
-// 3つで 1体、5つで 2体（ボーナス）。おいた 場所で 起きる。
 function mergeCheck(u) {
   const next = SPEC[u.type].next;
   if (!next) return false;
@@ -305,35 +333,72 @@ function mergeCheck(u) {
     born.push(spawn(next, u.side, spot ? spot.x : u.x, spot ? spot.y : u.y));
   }
 
-  const tier = { worker: 1, soldier: 2, major: 3 }[next] || 1;
+  const tier = { worker: 1, soldier: 2, major: 3, moundS: 2 }[next] || 1;
   sndMerge(tier);
   sparks(u.x, u.y);
   claimAround(u.x, u.y, u.side);
   mergesDone++;
 
   if (u.side === "p") {
-    banner(five
-      ? `⭐ 5つマージ！ ${SPEC[next].name}が 2体も うまれた！`
-      : `${SPEC[next].name}に なった！ もりも ひろがったよ。`);
+    const ns = SPEC[next];
+    if (next === "moundS") {
+      banner("⛰️ アリづかが できた！ じかんで 🥚を うんでくれる。づかが ふえるほど 増産だ！");
+      tutEvent("mound");
+    } else {
+      banner(five
+        ? `⭐ 5つマージ！ ${ns.name}（つよさ${ns.power}）が 2体も うまれた！`
+        : `${ns.name}に なった！ つよさ${ns.power}。もりも ひろがったよ。`);
+    }
+    tutEvent("merge");
   }
-  for (const b of born) mergeCheck(b); // れんさ
+  for (const b of born) mergeCheck(b);
   return true;
 }
 
-// ================= そうさ（ドラッグ） =================
+// ================= かりとり（くさむらを へらす） =================
+function startHarvest(u, x, y) {
+  u.x = x; u.y = y;
+  banner("もぐもぐ… 🌿を かりとりちゅう。");
+  u.harvest = setTimeout(() => {
+    u.harvest = null;
+    if (!units.includes(u) || u.x !== x || u.y !== y) return;
+    const t = tiles[idx(x, y)];
+    t.locked = false;
+    t.owner = "p";
+    flash.add(idx(x, y));
+    wakeSparkle(t, x, y, "p");
+    sndClaim();
+    sparks(x, y);
+
+    // ごほうび: くさむらの 中から 🥚や 🟤が 見つかる
+    const spot = N4(x, y).find(([a, b]) => {
+      const tt = tiles[idx(a, b)];
+      return !tt.locked && tt.owner === "p" && !unitAt(a, b);
+    });
+    if (spot) {
+      const r = Math.random();
+      if (r < drops.egg) { spawn("egg", "p", ...spot); banner("🌿の 中から 🥚を 見つけた！"); sndPop(); }
+      else if (r < drops.egg + drops.dirt) { spawn("dirt", "p", ...spot); banner("🌿の 中から 🟤つちのやまを 見つけた！ 3つ あつめると…"); sndPop(); }
+    }
+    tutEvent("harvest");
+    draw();
+  }, 1600);
+}
+
+// ================= そうさ =================
 const ghost = document.createElement("div");
 ghost.id = "ghost";
 
 document.addEventListener("pointerdown", (ev) => {
   if (over) return;
-  if (!ac) beep(1, .01, "sine", .001); // iOSの 音の ロック解除
+  if (!ac) beep(1, .01, "sine", .001);
   const el = ev.target.closest(".u");
   if (!el) return;
   const u = units.find(x => x.id === +el.dataset.id);
   if (!u || u.side !== "p") return;
 
-  // 生みの親（づか）は タップで たまごを うむ
   if (SPEC[u.type].gen) { tapGen(u); return; }
+  if (u.harvest) { clearTimeout(u.harvest); u.harvest = null; }
 
   dragging = { u, el };
   el.style.opacity = ".25";
@@ -354,57 +419,75 @@ document.addEventListener("pointerup", (ev) => {
   const r = tilesEl.getBoundingClientRect();
   const x = Math.floor((ev.clientX - r.left) / (ts + 2));
   const y = Math.floor((ev.clientY - r.top) / (ts + 2));
-  if (inB(x, y)) {
+  if (inB(x, y) && !unitAt(x, y)) {
     const t = tiles[idx(x, y)];
-    const ok = !t.locked && t.owner !== "e" && !unitAt(x, y);
-    if (ok) {
+    if (!t.locked && t.owner !== "e") {
       u.x = x; u.y = y;
       if (!mergeCheck(u)) beep(440, .04, "sine", .05);
-      tutEvent("moved");
+    } else if (
+      // くさむらへ おける のは 虫だけ。じぶんの 陣地の となりから かりとっていく
+      t.locked && SPEC[u.type].power >= 1 && !SPEC[u.type].gen &&
+      N4(x, y).some(([a, b]) => { const tt = tiles[idx(a, b)]; return !tt.locked && tt.owner === "p"; })
+    ) {
+      startHarvest(u, x, y);
     }
   }
   draw();
 });
 
-// づかを タップ → たまごが ぽんと 出る
 let genCool = 0;
 function tapGen(g) {
   const now = Date.now();
   if (now < genCool) return;
-  const spots = N4(g.x, g.y).filter(([x, y]) => {
-    const t = tiles[idx(x, y)];
-    return !t.locked && t.owner === g.side && !unitAt(x, y);
-  });
-  if (!spots.length) { banner("づかの まわりが いっぱいだよ。アリを うごかして あけよう。"); return; }
+  if (!tryProduce(g)) { banner("づかの まわりが いっぱいだよ。アリを うごかして あけよう。"); return; }
   genCool = now + 900;
-  const [x, y] = spots[Math.floor(Math.random() * spots.length)];
-  spawn(SPEC[g.type].gen, g.side, x, y);
-  beep(660, .07, "triangle", .1);
+  sndPop();
   tutEvent("egg");
   draw();
 }
 
-// ================= 外来種の ばん（自動） =================
-// 同じ ルールで そだつ: うむ → 3つで マージ → 陣地を ひろげて せまる
+// づかの 生産（タップでも 時間でも ここを 通る）
+function tryProduce(g) {
+  if (units.filter(u => u.side === "p" && u.type === "egg").length >= 8) return false;
+  const spots = N4(g.x, g.y).filter(([x, y]) => {
+    const t = tiles[idx(x, y)];
+    return !t.locked && t.owner === g.side && !unitAt(x, y);
+  });
+  if (!spots.length) return false;
+  spawn("egg", g.side, ...spots[Math.floor(Math.random() * spots.length)]);
+  return true;
+}
+
+// ================= 時間で うごくもの =================
+// 増産: づかは さわらなくても 🥚を うみつづける（Merge Dragons の 生産の 手ざわり）
+setInterval(() => {
+  if (over) return;
+  let made = false;
+  const now = Date.now();
+  for (const g of units.filter(u => u.side === "p" && SPEC[u.type].gen)) {
+    if (now >= g.nextAuto) {
+      g.nextAuto = now + SPEC[g.type].interval;
+      if (tryProduce(g)) made = true;
+    }
+  }
+  if (made) { sndPop(); draw(); }
+}, 700);
+
+// 外来種の ばん
 let enemyStep = 0;
 setInterval(() => {
   if (over) return;
   enemyStep++;
 
-  // うむ（すこしずつ はやくなる）
   const cap = 5 + Math.floor(enemyStep / 8);
-  const kids = units.filter(u => u.side === "e" && SPEC[u.type].power > 0 && !SPEC[u.type].gen);
+  const kids = units.filter(u => u.side === "e" && SPEC[u.type].power > 0 && u.type !== "nest");
   if (kids.length < cap) {
     const spots = N4(nest.x, nest.y).filter(([x, y]) => !tiles[idx(x, y)].locked && !unitAt(x, y));
     if (spots.length) spawn("worker", "e", ...spots[Math.floor(Math.random() * spots.length)]);
   }
 
-  // じぶんの 陣地で マージ（3つ そろえば）
   for (const u of kids) if (mergeCheck(u)) break;
 
-  // まえに すすむ（くさむらは ひらいて 陣地に かえながら）。
-  // プレイヤーが 1回 マージするまでは 自分の 陣地で そだつだけ（上限 約50秒）。
-  // 実機テスト1回目で「何も できないうちに 敵だけ せまってくる」が 起きたため。
   if (enemyStep < 8 || (mergesDone === 0 && enemyStep < 20)) { draw(); return; }
   const walkers = kids.sort((a, b) => b.y - a.y).slice(0, 3);
   for (const u of walkers) {
@@ -414,17 +497,14 @@ setInterval(() => {
     if (!cands.length) continue;
     const [x, y] = cands[0];
     const t = tiles[idx(x, y)];
-    if (t.locked) { t.locked = false; if (t.sparkle) { t.sparkle = false; spawn("kabuto", "e", x, y); } }
+    if (t.locked) { t.locked = false; wakeSparkle(t, x, y, "e"); }
     t.owner = "e";
     u.x = x; u.y = y;
   }
   draw();
 }, 2600);
 
-// ================= あらそい =================
-// せっしょくした かたまり同士で くらべる。
-//   同格どうし → 数の 合計で きまる
-//   上の格が いる → 1体でも 相手の 合計を こえていれば まとめて 圧倒
+// あらそい
 setInterval(() => {
   if (over) return;
   let fought = false;
@@ -454,7 +534,7 @@ setInterval(() => {
 
     const kill = (side, all) => {
       const g = side === "e" ? yours : mine;
-      const targets = all ? g : [g.filter(u => !SPEC[u.type].gen).sort((a, b) => SPEC[a.type].power - SPEC[b.type].power)[0] || g[0]];
+      const targets = all ? g : [g.filter(u => !SPEC[u.type].gen && u.type !== "nest").sort((a, b) => SPEC[a.type].power - SPEC[b.type].power)[0] || g[0]];
       for (const t of targets) {
         if (!units.includes(t)) continue;
         units.splice(units.indexOf(t), 1);
@@ -469,7 +549,7 @@ setInterval(() => {
     else if (pSum > eSum) kill("e", false);
     else if (eSum > pSum) kill("p", false);
     else { kill("e", false); kill("p", false); }
-    break; // 1回の tick で 1か所だけ（見て わかるように）
+    break;
   }
 
   if (fought) { sndFight(); tutEvent("fight"); checkEnd(); draw(); }
@@ -479,10 +559,10 @@ function checkEnd() {
   if (over) return;
   if (!units.includes(nest)) {
     over = true;
-    showEnd("もりを とりもどした！ 🎉", "外来種の 巣まで たどりついた。むしは 群れの力で すみかを まもれるんだ。アリも カブトムシも それぞれの くらしに もどっていくよ。");
+    showEnd("もりを とりもどした！ 🎉", "外来種の 巣まで たどりついた。むしは 群れの力で すみかを まもれるんだ。");
   } else if (!units.includes(queen)) {
     over = true;
-    showEnd("女王アリづかが…", "外来種に すみかを うばわれてしまった。こんどは はやめに マージして、へいたいアリを そだてておこう。");
+    showEnd("女王アリづかが…", "外来種に すみかを うばわれてしまった。アリづかを ふやして、へいたいを はやめに そだてよう。");
   }
 }
 function showEnd(t, b) {
@@ -494,30 +574,26 @@ function showEnd(t, b) {
 // ================= チュートリアル =================
 const tutEl = document.getElementById("tut");
 const TUT = [
-  { text: "⛰️ 女王アリづかを タップしてみよう。たまごが うまれるよ。", done: (e) => e === "egg" },
-  { text: "たまごを 3つ うんで、ドラッグで となりあわせよう。3つ ならぶと…！", done: (e) => e === "merge" },
-  { text: "マージすると 🌿くさむらが ひらいて、もりが ひろがる！ 5つ ならべると 2体 うまれて もっと おとく。", done: (e) => e === "merge" },
-  { text: "アリを そだてよう。🐜×3 → へいたいアリ ×3 → おおあごへいたい。むらさきの 外来種も そだって せまってくるよ。", done: (e) => e === "fight" },
-  { text: "ぶつかったら 数と 格の しょうぶ！ ✨光るマスには カブトムシが ねむっている。あいての 巣🕳️を めざそう！", done: () => false, timeout: 9000 },
+  { text: "👑⛰️を タップ → 🥚が うまれる。づかは じかんでも かってに 🥚を うむよ。", done: (e) => e === "egg" },
+  { text: "🥚を ドラッグして 3つ ならべよう。3つで 🐜、5つ ならべると 2体 うまれて おとく！", done: (e) => e === "merge" },
+  { text: "🐜を 🌿くさむらの 上に おいてみよう。かりとって もりが ひろがり、🥚や 🟤が 見つかることも！", done: (e) => e === "harvest" },
+  { text: "🟤つちのやまを 3つ あつめると ⛰️アリづか！ づかが ふえるほど 🥚の 増産が はやくなる。", done: (e) => e === "mound", timeout: 25000 },
+  { text: "🐜も 3つで 上の 格に！ 大きさと 数字（つよさ）が 上がる。あいての 巣🕳️を めざそう！", done: () => false, timeout: 10000 },
 ];
 let tutStep = 0;
 function showTut() {
   if (tutStep >= TUT.length) { tutEl.classList.add("hidden"); applyTile(); draw(); return; }
   document.getElementById("tut-text").textContent = TUT[tutStep].text;
   tutEl.classList.remove("hidden");
-  if (TUT[tutStep].timeout) setTimeout(() => { if (tutStep < TUT.length) { tutStep = TUT.length; showTut(); } }, TUT[tutStep].timeout);
+  const my = tutStep;
+  if (TUT[my].timeout) setTimeout(() => { if (tutStep === my) { tutStep++; showTut(); } }, TUT[my].timeout);
 }
-document.getElementById("tut-skip").addEventListener("click", () => { tutStep = TUT.length; showTut(); });
-document.getElementById("restart").addEventListener("click", () => location.reload());
 function tutEvent(e) {
   if (tutStep >= TUT.length) return;
   if (TUT[tutStep].done(e)) { tutStep++; showTut(); }
 }
-// マージの 発生は mergesDone の 増えかたで 見はる（mergeCheck の 中を いじらないため）
-(function watchMerges() {
-  let last = 0;
-  setInterval(() => { if (mergesDone > last) { last = mergesDone; tutEvent("merge"); } }, 300);
-})();
+document.getElementById("tut-skip").addEventListener("click", () => { tutStep = TUT.length; showTut(); });
+document.getElementById("restart").addEventListener("click", () => location.reload());
 
 banner("むらさきの 外来種から、みどりの もりを とりもどそう。");
 showTut();
@@ -525,9 +601,9 @@ applyTile();
 draw();
 addEventListener("resize", () => { applyTile(); draw(); });
 
-// e2e 用の のぞき口
 if (new URLSearchParams(location.search).has("e2e")) {
-  window.__e2e = { units, tiles, spawn, mergeCheck, unitAt, W, H, get over() { return over; }, queen, nest, draw, checkEnd };
+  window.__e2e = { units, tiles, spawn, mergeCheck, unitAt, W, H, queen, nest, drops, draw,
+    get over() { return over; }, get merges() { return mergesDone; } };
 }
 </script>
 </body>

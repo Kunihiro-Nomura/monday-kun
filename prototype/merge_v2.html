@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<!-- Copyright (c) 2026 Kunihiro Nomura. All rights reserved. -->
+<!-- 昆虫戦争 (Konchu Senso) — 無断複製・改変・再配布を禁じます。詳細は /LICENSE を参照。 -->
+<!--
+  マージ×陣取り 試作2。試作1への 社長評「爽快感がない・ゴールが不明・子供には無理」への 作り直し。
+
+  v1からの 変更:
+  - ターン制を すてて リアルタイム＋ドラッグ操作（Merge Dragons と同じ 手ざわり）
+  - 3つで マージ、5つで ボーナスマージ（上位が 2体 できる）
+  - 盤の まん中は「くさむら」（非アクティブマス）。マージの 近くだけ ひらいて 陣地になる
+  - 敵（外来種）も 同じルールで マージして 肥大化し、陣地を 広げて せまってくる
+  - ぶつかると 争い。同格なら 数で 勝敗、上の 格なら 少数でも 圧倒
+  - カブトムシは 一騎当千。くさむらの 光るマスに ねむっている
+  - チュートリアルを 最初に 入れる
+-->
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no, viewport-fit=cover">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>🐜</text></svg>">
+<title>むしの もり（マージ陣取り 試作2）</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html, body { overscroll-behavior:none; }
+  body {
+    background:#161d10; color:#eef4e0;
+    font-family:"Hiragino Maru Gothic ProN","BIZ UDGothic",sans-serif;
+    user-select:none; -webkit-user-select:none;
+    min-height:100dvh; display:flex; flex-direction:column; align-items:center;
+    touch-action:none;
+  }
+  #goal {
+    width:100%; max-width:430px; padding:max(8px,env(safe-area-inset-top)) 12px 2px;
+    font-size:13px; color:#b9d391;
+  }
+  #goal b { color:#ffe27a; }
+  #banner {
+    width:100%; max-width:430px; min-height:46px; padding:4px 12px 6px;
+    font-size:14px; line-height:1.5;
+  }
+  #board { position:relative; border-radius:12px; background:#0f150a; padding:5px; }
+  #tiles { display:grid; gap:2px; }
+  .tile { width:var(--ts); height:var(--ts); border-radius:6px; position:relative; }
+  .tile.p  { background:#4a7c3f; }
+  .tile.p.alt { background:#548b47; }
+  .tile.e  { background:#4a3050; }
+  .tile.e.alt { background:#553a5c; }
+  .tile.n  { background:#8b7d58; }
+  .tile.n.alt { background:#948565; }
+  .tile.locked { background:#2e3b22; }
+  .tile.locked.alt { background:#33421f; }
+  .tile.locked::after { content:"🌿"; position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:calc(var(--ts)*.5); opacity:.8; }
+  .tile.sparkle.locked::after { content:"✨"; }
+  .tile.claimflash { animation:claim .5s ease-out; }
+  @keyframes claim { from { filter:brightness(2.2); } to { filter:none; } }
+
+  #units { position:absolute; inset:5px; pointer-events:none; }
+  .u {
+    position:absolute; width:var(--ts); height:var(--ts);
+    display:flex; align-items:center; justify-content:center;
+    font-size:calc(var(--ts)*.66); line-height:1;
+    filter:drop-shadow(0 2px 1px rgba(0,0,0,.5));
+    pointer-events:auto; transition:left .12s, top .12s;
+  }
+  .u .badge {
+    position:absolute; right:-2px; bottom:-2px; font-size:10px; font-weight:800;
+    background:#243318; color:#cfe8ac; border:1px solid #56704a; border-radius:8px; padding:0 3px;
+  }
+  .u.e .badge { background:#3d1f2c; color:#ffc9c9; border-color:#8a4a55; }
+  .u.pop { animation:pop .4s ease-out; }
+  @keyframes pop { 0% { transform:scale(.3); } 60% { transform:scale(1.35); } 100% { transform:scale(1); } }
+  .u.gen { font-size:calc(var(--ts)*.8); }
+  .u.dying { animation:die .3s ease-in forwards; }
+  @keyframes die { to { transform:scale(.2) rotate(40deg); opacity:0; } }
+  #ghost { position:fixed; pointer-events:none; font-size:34px; z-index:50; transform:translate(-50%,-60%); filter:drop-shadow(0 3px 3px rgba(0,0,0,.6)); }
+  .spark { position:absolute; pointer-events:none; font-size:14px; animation:fly .6s ease-out forwards; z-index:40; }
+  @keyframes fly { to { transform:translate(var(--dx),var(--dy)) scale(.3); opacity:0; } }
+
+  #tut {
+    position:fixed; left:50%; bottom:calc(14px + env(safe-area-inset-bottom)); transform:translateX(-50%);
+    width:min(92vw,400px); background:#26331e; border:2px solid #8fd06a; border-radius:14px;
+    padding:12px 14px; font-size:15px; line-height:1.6; z-index:60;
+    box-shadow:0 6px 24px rgba(0,0,0,.5);
+  }
+  #tut.hidden { display:none; }
+  #modal { position:fixed; inset:0; background:rgba(8,12,6,.75); display:flex; align-items:center; justify-content:center; padding:22px; z-index:70; }
+  #modal.hidden { display:none; }
+  #modal .box { background:#26331e; border:2px solid #56704a; border-radius:16px; padding:20px; max-width:340px; line-height:1.7; font-size:15px; }
+  #modal h2 { color:#b9e08c; margin-bottom:8px; }
+  #modal button { margin-top:14px; width:100%; font:inherit; font-weight:700; padding:12px; border-radius:12px; border:2px solid #56704a; background:#33452a; color:#eef4e0; }
+</style>
+</head>
+<body>
+<div id="goal">めあて: マージで もりを ひろげて、<b>あいての 巣🕳️まで たどりつこう</b></div>
+<div id="banner"></div>
+<div id="board"><div id="tiles"></div><div id="units"></div></div>
+<div id="tut" class="hidden"></div>
+<div id="modal" class="hidden"><div class="box"><h2 id="m-title"></h2><p id="m-body"></p><button onclick="location.reload()">もういちど あそぶ</button></div></div>
+
+<script>
+"use strict";
+
+// ================= 盤 =================
+const W = 9, H = 14;
+// tile: { owner:'p'|'e'|null, locked:bool, sparkle:bool }
+const tiles = [];
+for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+  const t = { owner: null, locked: true, sparkle: false };
+  if (y >= H - 3) { t.owner = "p"; t.locked = false; }   // 自陣
+  if (y <= 2)     { t.owner = "e"; t.locked = false; }   // 敵陣
+  tiles.push(t);
+}
+// カブトムシが ねむる 光るマス（くさむらの 中）
+tiles[6 * W + 1].sparkle = true;
+tiles[8 * W + 7].sparkle = true;
+
+const idx = (x, y) => y * W + x;
+const inB = (x, y) => x >= 0 && y >= 0 && x < W && y < H;
+const N4 = (x, y) => [[x+1,y],[x-1,y],[x,y+1],[x,y-1]].filter(([a,b]) => inB(a,b));
+
+// ================= 虫 =================
+// power: あらそいの 強さ。上の 格は 1体で 下を まとめて 圧倒できる 段差にしてある。
+const SPEC = {
+  egg:    { name:"たまご",          emoji:"🥚", power:0,  next:"worker"  },
+  worker: { name:"はたらきアリ",     emoji:"🐜", power:1,  next:"soldier" },
+  soldier:{ name:"へいたいアリ",     emoji:"🐜", power:4,  next:"major",  big:1.25 },
+  major:  { name:"おおあごへいたい", emoji:"🐜", power:16, next:null,     big:1.5  },
+  kabuto: { name:"カブトムシ",       emoji:"🪲", power:30, next:null,     big:1.4  },
+  queen:  { name:"女王アリづか",     emoji:"⛰️", power:3,  gen:"egg" },
+  nest:   { name:"外来種の 巣",      emoji:"🕳️", power:3,  gen:"worker" },
+};
+const BADGE = { soldier:"へい", major:"大", kabuto:"強" };
+
+// unit: {id,type,side,x,y}
+const units = [];
+let nextId = 1;
+const unitAt = (x, y) => units.find(u => u.x === x && u.y === y);
+function spawn(type, side, x, y, pop = true) {
+  const u = { id: nextId++, type, side, x, y, pop };
+  units.push(u);
+  return u;
+}
+
+const queen = spawn("queen", "p", 4, H - 2, false);
+const nest  = spawn("nest",  "e", 4, 1, false);
+spawn("egg", "p", 3, H - 2, false);
+spawn("egg", "p", 5, H - 2, false);
+
+let over = false;
+let mergesDone = 0;
+let merge5Done = false;
+
+// ================= 音（爽快感の 半分は 音） =================
+let ac = null;
+function beep(freq, dur = .09, type = "triangle", gain = .12, when = 0) {
+  try {
+    if (!ac) ac = new (window.AudioContext || window.webkitAudioContext)();
+    const t0 = ac.currentTime + when;
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.type = type; o.frequency.value = freq;
+    g.gain.setValueAtTime(gain, t0);
+    g.gain.exponentialRampToValueAtTime(.001, t0 + dur);
+    o.connect(g).connect(ac.destination);
+    o.start(t0); o.stop(t0 + dur + .02);
+  } catch { /* 音が 出なくても 遊べる */ }
+}
+const sndMerge = (tier) => { [0,1,2].forEach(i => beep(330 * Math.pow(1.5, tier) * (1 + i * .26), .12, "triangle", .14, i * .05)); };
+const sndClaim = () => beep(880, .06, "sine", .07);
+const sndFight = () => beep(120, .12, "square", .10);
+const sndFind  = () => { [523,659,784,1046].forEach((f,i) => beep(f, .14, "triangle", .13, i * .07)); };
+
+// ================= 見た目 =================
+const ts = Math.min(46, Math.floor((Math.min(innerWidth, 430) - 26) / W));
+document.documentElement.style.setProperty("--ts", ts + "px");
+const tilesEl = document.getElementById("tiles");
+const unitsEl = document.getElementById("units");
+tilesEl.style.gridTemplateColumns = `repeat(${W}, ${ts}px)`;
+const bannerEl = document.getElementById("banner");
+const banner = (t) => { bannerEl.textContent = t; };
+
+let dragging = null;
+let dirty = false;
+const flash = new Set();
+
+function draw() {
+  if (dragging) { dirty = true; return; } // ドラッグ中は 盤を 作り直さない
+  tilesEl.innerHTML = "";
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const t = tiles[idx(x, y)];
+    const d = document.createElement("div");
+    d.className = "tile " + (t.locked ? "locked" : (t.owner || "n")) + ((x + y) % 2 ? " alt" : "");
+    if (t.sparkle && t.locked) d.classList.add("sparkle");
+    if (flash.has(idx(x, y))) d.classList.add("claimflash");
+    tilesEl.appendChild(d);
+  }
+  flash.clear();
+
+  unitsEl.innerHTML = "";
+  for (const u of units) {
+    const s = SPEC[u.type];
+    const d = document.createElement("div");
+    d.className = "u" + (u.side === "e" ? " e" : "") + (s.gen ? " gen" : "") + (u.pop ? " pop" : "");
+    u.pop = false;
+    d.style.left = u.x * (ts + 2) + "px";
+    d.style.top  = u.y * (ts + 2) + "px";
+    if (s.big) d.style.fontSize = `calc(var(--ts) * ${.66 * s.big})`;
+    d.textContent = s.emoji;
+    if (BADGE[u.type]) {
+      const b = document.createElement("span");
+      b.className = "badge";
+      b.textContent = BADGE[u.type];
+      d.appendChild(b);
+    }
+    d.dataset.id = u.id;
+    unitsEl.appendChild(d);
+  }
+}
+
+function sparks(x, y) {
+  for (let i = 0; i < 6; i++) {
+    const s = document.createElement("div");
+    s.className = "spark";
+    s.textContent = "✨";
+    s.style.left = x * (ts + 2) + ts / 2 + "px";
+    s.style.top  = y * (ts + 2) + ts / 2 + "px";
+    s.style.setProperty("--dx", (Math.random() * 90 - 45) + "px");
+    s.style.setProperty("--dy", (Math.random() * 90 - 45) + "px");
+    unitsEl.appendChild(s);
+    setTimeout(() => s.remove(), 650);
+  }
+}
+
+// ================= 陣地 =================
+// マージした まわり 3×3 を じぶんの 陣地にする。くさむらも ひらく。
+function claimAround(cx, cy, side) {
+  for (let y = cy - 1; y <= cy + 1; y++) for (let x = cx - 1; x <= cx + 1; x++) {
+    if (!inB(x, y)) continue;
+    const t = tiles[idx(x, y)];
+    if (t.owner === (side === "p" ? "e" : "p")) continue; // 相手の 陣地は あらそいでしか うばえない
+    if (t.locked) {
+      t.locked = false;
+      // 光るマスから カブトムシが 目をさます（ひらいた 側の なかまに）
+      if (t.sparkle && !unitAt(x, y)) {
+        t.sparkle = false;
+        spawn("kabuto", side, x, y);
+        sndFind();
+        if (side === "p") banner("✨ カブトムシが 目を さました！ 一騎当千の ちからだ！");
+      }
+    }
+    if (t.owner !== side) { t.owner = side; flash.add(idx(x, y)); }
+  }
+  sndClaim();
+}
+
+// ================= マージ =================
+// 3つで 1体、5つで 2体（ボーナス）。おいた 場所で 起きる。
+function mergeCheck(u) {
+  const next = SPEC[u.type].next;
+  if (!next) return false;
+
+  const group = [];
+  const seen = new Set([u.id]);
+  const q = [u];
+  while (q.length) {
+    const c = q.pop();
+    group.push(c);
+    for (const [nx, ny] of N4(c.x, c.y)) {
+      const o = unitAt(nx, ny);
+      if (o && !seen.has(o.id) && o.side === u.side && o.type === u.type) { seen.add(o.id); q.push(o); }
+    }
+  }
+  if (group.length < 3) return false;
+
+  const five = group.length >= 5;
+  const used = [u, ...group.filter(g => g !== u).slice(0, five ? 4 : 2)];
+  for (const g of used) units.splice(units.indexOf(g), 1);
+
+  const born = [spawn(next, u.side, u.x, u.y)];
+  if (five) {
+    const spot = used.find(g => g !== u && !unitAt(g.x, g.y));
+    born.push(spawn(next, u.side, spot ? spot.x : u.x, spot ? spot.y : u.y));
+  }
+
+  const tier = { worker: 1, soldier: 2, major: 3 }[next] || 1;
+  sndMerge(tier);
+  sparks(u.x, u.y);
+  claimAround(u.x, u.y, u.side);
+  mergesDone++;
+
+  if (u.side === "p") {
+    banner(five
+      ? `⭐ 5つマージ！ ${SPEC[next].name}が 2体も うまれた！`
+      : `${SPEC[next].name}に なった！ もりも ひろがったよ。`);
+  }
+  for (const b of born) mergeCheck(b); // れんさ
+  return true;
+}
+
+// ================= そうさ（ドラッグ） =================
+const ghost = document.createElement("div");
+ghost.id = "ghost";
+
+document.addEventListener("pointerdown", (ev) => {
+  if (over) return;
+  if (!ac) beep(1, .01, "sine", .001); // iOSの 音の ロック解除
+  const el = ev.target.closest(".u");
+  if (!el) return;
+  const u = units.find(x => x.id === +el.dataset.id);
+  if (!u || u.side !== "p") return;
+
+  // 生みの親（づか）は タップで たまごを うむ
+  if (SPEC[u.type].gen) { tapGen(u); return; }
+
+  dragging = { u, el };
+  el.style.opacity = ".25";
+  ghost.textContent = SPEC[u.type].emoji;
+  document.body.appendChild(ghost);
+  moveGhost(ev);
+});
+document.addEventListener("pointermove", (ev) => { if (dragging) moveGhost(ev); });
+function moveGhost(ev) { ghost.style.left = ev.clientX + "px"; ghost.style.top = ev.clientY + "px"; }
+
+document.addEventListener("pointerup", (ev) => {
+  if (!dragging) return;
+  const { u, el } = dragging;
+  dragging = null;
+  ghost.remove();
+  el.style.opacity = "";
+
+  const r = tilesEl.getBoundingClientRect();
+  const x = Math.floor((ev.clientX - r.left) / (ts + 2));
+  const y = Math.floor((ev.clientY - r.top) / (ts + 2));
+  if (inB(x, y)) {
+    const t = tiles[idx(x, y)];
+    const ok = !t.locked && t.owner !== "e" && !unitAt(x, y);
+    if (ok) {
+      u.x = x; u.y = y;
+      if (!mergeCheck(u)) beep(440, .04, "sine", .05);
+      tutEvent("moved");
+    }
+  }
+  if (dirty) { dirty = false; }
+  draw();
+});
+
+// づかを タップ → たまごが ぽんと 出る
+let genCool = 0;
+function tapGen(g) {
+  const now = Date.now();
+  if (now < genCool) return;
+  const spots = N4(g.x, g.y).filter(([x, y]) => {
+    const t = tiles[idx(x, y)];
+    return !t.locked && t.owner === g.side && !unitAt(x, y);
+  });
+  if (!spots.length) { banner("づかの まわりが いっぱいだよ。アリを うごかして あけよう。"); return; }
+  genCool = now + 900;
+  const [x, y] = spots[Math.floor(Math.random() * spots.length)];
+  spawn(SPEC[g.type].gen, g.side, x, y);
+  beep(660, .07, "triangle", .1);
+  tutEvent("egg");
+  draw();
+}
+
+// ================= 外来種の ばん（自動） =================
+// 同じ ルールで そだつ: うむ → 3つで マージ → 陣地を ひろげて せまる
+let enemyStep = 0;
+setInterval(() => {
+  if (over) return;
+  enemyStep++;
+
+  // うむ（すこしずつ はやくなる）
+  const cap = 5 + Math.floor(enemyStep / 8);
+  const kids = units.filter(u => u.side === "e" && SPEC[u.type].power > 0 && !SPEC[u.type].gen);
+  if (kids.length < cap) {
+    const spots = N4(nest.x, nest.y).filter(([x, y]) => !tiles[idx(x, y)].locked && !unitAt(x, y));
+    if (spots.length) spawn("worker", "e", ...spots[Math.floor(Math.random() * spots.length)]);
+  }
+
+  // じぶんの 陣地で マージ（3つ そろえば）
+  for (const u of kids) if (mergeCheck(u)) break;
+
+  // まえに すすむ（くさむらは ひらいて 陣地に かえながら）。
+  // はじめの 20秒ほどは 自分の 陣地で そだつだけ。
+  // チュートリアルの あいだに 攻めこまれると、子供は 何も できずに まける。
+  if (enemyStep < 8) { draw(); return; }
+  const walkers = kids.sort((a, b) => b.y - a.y).slice(0, 3);
+  for (const u of walkers) {
+    const cands = N4(u.x, u.y)
+      .filter(([x, y]) => !unitAt(x, y) && tiles[idx(x, y)].owner !== "p")
+      .sort((a, b) => (Math.abs(a[0] - queen.x) + Math.abs(a[1] - queen.y)) - (Math.abs(b[0] - queen.x) + Math.abs(b[1] - queen.y)));
+    if (!cands.length) continue;
+    const [x, y] = cands[0];
+    const t = tiles[idx(x, y)];
+    if (t.locked) { t.locked = false; if (t.sparkle) { t.sparkle = false; spawn("kabuto", "e", x, y); } }
+    t.owner = "e";
+    u.x = x; u.y = y;
+  }
+  draw();
+}, 2600);
+
+// ================= あらそい =================
+// せっしょくした かたまり同士で くらべる。
+//   同格どうし → 数の 合計で きまる
+//   上の格が いる → 1体でも 相手の 合計を こえていれば まとめて 圧倒
+setInterval(() => {
+  if (over) return;
+  let fought = false;
+
+  for (const p of [...units]) {
+    if (p.side !== "p" || !units.includes(p)) continue;
+    const foe = N4(p.x, p.y).map(([x, y]) => unitAt(x, y)).find(o => o && o.side === "e");
+    if (!foe) continue;
+
+    const cluster = (start) => {
+      const g = [], seen = new Set([start.id]), q = [start];
+      while (q.length) {
+        const c = q.pop();
+        g.push(c);
+        for (const [nx, ny] of N4(c.x, c.y)) {
+          const o = unitAt(nx, ny);
+          if (o && !seen.has(o.id) && o.side === start.side) { seen.add(o.id); q.push(o); }
+        }
+      }
+      return g;
+    };
+    const mine = cluster(p), yours = cluster(foe);
+    const sum = (g) => g.reduce((a, u) => a + SPEC[u.type].power, 0);
+    const pSum = sum(mine), eSum = sum(yours);
+    const pMax = Math.max(...mine.map(u => SPEC[u.type].power));
+    const eMax = Math.max(...yours.map(u => SPEC[u.type].power));
+
+    const kill = (side, all) => {
+      const g = side === "e" ? yours : mine;
+      const targets = all ? g : [g.filter(u => !SPEC[u.type].gen).sort((a, b) => SPEC[a.type].power - SPEC[b.type].power)[0] || g[0]];
+      for (const t of targets) {
+        if (!units.includes(t)) continue;
+        units.splice(units.indexOf(t), 1);
+        tiles[idx(t.x, t.y)].owner = side === "e" ? "p" : "e";
+        flash.add(idx(t.x, t.y));
+      }
+    };
+
+    fought = true;
+    if (pMax >= eSum && pSum > eSum) { kill("e", true); banner("💥 格が うえだ！ まとめて おいはらった！"); }
+    else if (eMax >= pSum && eSum > pSum) { kill("p", true); }
+    else if (pSum > eSum) kill("e", false);
+    else if (eSum > pSum) kill("p", false);
+    else { kill("e", false); kill("p", false); }
+    break; // 1回の tick で 1か所だけ（見て わかるように）
+  }
+
+  if (fought) { sndFight(); tutEvent("fight"); checkEnd(); draw(); }
+}, 1600);
+
+function checkEnd() {
+  if (over) return;
+  if (!units.includes(nest)) {
+    over = true;
+    showEnd("もりを とりもどした！ 🎉", "外来種の 巣まで たどりついた。むしは 群れの力で すみかを まもれるんだ。アリも カブトムシも それぞれの くらしに もどっていくよ。");
+  } else if (!units.includes(queen)) {
+    over = true;
+    showEnd("女王アリづかが…", "外来種に すみかを うばわれてしまった。こんどは はやめに マージして、へいたいアリを そだてておこう。");
+  }
+}
+function showEnd(t, b) {
+  document.getElementById("m-title").textContent = t;
+  document.getElementById("m-body").textContent = b;
+  document.getElementById("modal").classList.remove("hidden");
+}
+
+// ================= チュートリアル =================
+const tutEl = document.getElementById("tut");
+const TUT = [
+  { text: "⛰️ 女王アリづかを タップしてみよう。たまごが うまれるよ。", done: (e) => e === "egg" },
+  { text: "たまごを 3つ うんで、ドラッグで となりあわせよう。3つ ならぶと…！", done: (e) => e === "merge" },
+  { text: "マージすると 🌿くさむらが ひらいて、もりが ひろがる！ 5つ ならべると 2体 うまれて もっと おとく。", done: (e) => e === "merge" },
+  { text: "アリを そだてよう。🐜×3 → へいたいアリ ×3 → おおあごへいたい。むらさきの 外来種も そだって せまってくるよ。", done: (e) => e === "fight" },
+  { text: "ぶつかったら 数と 格の しょうぶ！ ✨光るマスには カブトムシが ねむっている。あいての 巣🕳️を めざそう！", done: () => false, timeout: 9000 },
+];
+let tutStep = 0;
+function showTut() {
+  if (tutStep >= TUT.length) { tutEl.classList.add("hidden"); return; }
+  tutEl.textContent = TUT[tutStep].text;
+  tutEl.classList.remove("hidden");
+  if (TUT[tutStep].timeout) setTimeout(() => { if (tutStep < TUT.length) { tutStep = TUT.length; showTut(); } }, TUT[tutStep].timeout);
+}
+function tutEvent(e) {
+  if (tutStep >= TUT.length) return;
+  if (TUT[tutStep].done(e)) { tutStep++; showTut(); }
+}
+// マージの 発生は mergesDone の 増えかたで 見はる（mergeCheck の 中を いじらないため）
+(function watchMerges() {
+  let last = 0;
+  setInterval(() => { if (mergesDone > last) { last = mergesDone; tutEvent("merge"); } }, 300);
+})();
+
+banner("むらさきの 外来種から、みどりの もりを とりもどそう。");
+showTut();
+draw();
+
+// e2e 用の のぞき口
+if (new URLSearchParams(location.search).has("e2e")) {
+  window.__e2e = { units, tiles, spawn, mergeCheck, unitAt, W, H, get over() { return over; }, queen, nest, draw, checkEnd };
+}
+</script>
+</body>
+</html>

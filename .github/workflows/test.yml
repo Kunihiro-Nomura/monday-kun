@@ -12,11 +12,13 @@ on:
   push:
     paths:
       - 'game/**'
+      - 'prototype/**'
       - 'scripts/**'
       - '.github/workflows/test.yml'
   pull_request:
     paths:
       - 'game/**'
+      - 'prototype/**'
       - 'scripts/**'
       - '.github/workflows/test.yml'
   workflow_dispatch:
@@ -62,12 +64,21 @@ jobs:
       - name: ゲームを 立ち上げる
         run: |
           npx --yes http-server game -p 8123 -c-1 &
+          npx --yes http-server . -p 8124 -c-1 &
           npx --yes wait-on http://localhost:8123/index.html --timeout 60000
+          npx --yes wait-on http://localhost:8124/prototype/merge_v2.html --timeout 60000
 
       - name: 画面のテスト
         env:
           GAME_URL: http://localhost:8123
         run: node game/test/ui.test.mjs artifacts
+
+      # マージ×陣取りの 試作。指と 同じ 座標そうさ だけで さわる。
+      # 「盤が 凍りついて ゲームが 終われない」を ここで 見張る。
+      - name: 試作（マージ×陣取り）のテスト
+        env:
+          PROTO_URL: http://localhost:8124/prototype
+        run: node prototype/test/merge.test.mjs
 
       # 落ちたときに 何が 映っていたのかを 見られるようにしておく
       - name: スクリーンショットを のこす

@@ -47,12 +47,22 @@ node game/test/engine.test.mjs
 # 画面のながれ（iPhone サイズの実ブラウザ）
 npx http-server game -p 8123 -c-1 &
 GAME_URL=http://localhost:8123 node game/test/ui.test.mjs
+
+# マージ×陣取りの試作（prototype/ をさわったとき）
+npx http-server . -p 8124 -c-1 &
+PROTO_URL=http://localhost:8124/prototype node prototype/test/merge.test.mjs
 ```
 
 - Playwright は `node_modules` をグローバルにシンボリックリンクして使っている（`.gitignore` 済み）
 - UI テストはリポジトリ直下から実行すること（ESM が `playwright` を解決できないため）
 - 新しいルールを足したら、**不変条件のテストも一緒に足す**
   （例: 寄生が無限に続かない、季節と寄生の補正を重ねても攻撃力が負にならない）
+- **リアルタイムの試作では「盤が凍りつかないか」を必ず見る。**
+  自分から動く虫は、行き先を失うとその場で永久に止まる。
+  実測で3回とも別々の原因で止まっていた（§11）。止まるとゲームが終われない
+- **画面をさわる検証は、実際の指と同じ座標タップ・座標ドラッグだけで行う。**
+  JS の関数を直接呼ぶ検証は画面の不具合を素通しする。
+  盤の大きさは途中で変わるので、**座標は毎回測りなおす**（使いまわすと違うマスをさわる）
 
 ## ChatGPT（グラフィック担当）への指示の出し方
 

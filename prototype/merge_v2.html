@@ -2,7 +2,7 @@
 <!-- Copyright (c) 2026 Kunihiro Nomura. All rights reserved. -->
 <!-- 昆虫戦争 (Konchu Senso) — 無断複製・改変・再配布を禁じます。詳細は /LICENSE を参照。 -->
 <!--
-  マージ×陣取り 試作3（ファイル名は v2 のまま。URLを 変えないため）。
+  マージ×陣取り 試作7（ファイル名は v2 のまま。URLを 変えないため）。
 
   試作2への 社長評と 対応:
   - 「へい」バッジが 分からない → 格が 上がると 大きさ・色が 変わり、つよさを 数字で 出す
@@ -10,13 +10,24 @@
   - 草を 減らす 方法が 不明     → アリを 🌿に おくと「かりとる」。ごほうびに 🥚や 🟤が 出る
   - アリ塚を 増やす 仕組みが ない → 🟤つちのやま×3 → ⛰️アリづか。づかは 時間で 🥚を 増産
   - もっと Merge Dragons ふうに → さわらなくても 生産が 回り、マージ待ちの 2つは 光って さそう
+
+  試作7（自動プレイの 実測で 見つけた 5件を 直した。docs/マージ陣取り構想_v1.md §11）:
+  - **ゲームが 終われなかった** → 草が つきると 虫の 仕事が なくなり、盤は
+    味方89/敵37 の まま 凍りついた。めあては「あいての 巣まで」なのに 前に 進む
+    手だてが なかった。**あいての 陣地を おしかえす**（かりとりと 同じ 手ざわり）を 足した
+  - 敵の 猶予が こわれていた → 「プレイヤーが まだ 1回も マージ していない あいだは
+    進軍を 待つ」つもりが、**敵じしんの マージでも 解除**されていた
+  - 上がりきった 虫が マージ待ちで 固まる → おおあご(16)・カブトムシ(30)は
+    これ以上 マージ できないのに、なかまと ならぶと 来ない 3つめを 待ちつづけていた
+  - づかの 増産が 黙って 止まる → となり4マスが 🥚で うまると そこで 停止。半径2まで 見る
+  - チュートリアルに ** が そのまま 出ていた → 記号ではなく ことばで 強める
 -->
 <html lang="ja">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no, viewport-fit=cover">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>🐜</text></svg>">
-<title>むしの もり（マージ陣取り 試作3）</title>
+<title>むしの もり（マージ陣取り 試作7）</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
   html, body { overscroll-behavior:none; }
@@ -116,6 +127,9 @@
   /* かりとり中は もぐもぐ ゆれる */
   .u.harvest { animation:chew .5s ease-in-out infinite; }
   @keyframes chew { 50% { transform:rotate(9deg) scale(1.06); } }
+  /* あいての 陣地を おしかえしている あいだは、刈るのとは ちがう 動き（前に ぐいぐい） */
+  .u.pushing { animation:pushing .6s ease-in-out infinite; }
+  @keyframes pushing { 50% { transform:translateY(-4px) scale(1.08); filter:drop-shadow(0 0 7px #d59bff); } }
 
   #ghost { position:fixed; pointer-events:none; font-size:34px; z-index:50; transform:translate(-50%,-60%); filter:drop-shadow(0 3px 3px rgba(0,0,0,.6)); }
   .spark { position:absolute; pointer-events:none; font-size:14px; animation:fly .6s ease-out forwards; z-index:40; }
@@ -195,9 +209,19 @@ const nest  = spawn("nest",  "e", 4, 1, false);
 spawn("egg", "p", 3, H - 2, false);
 spawn("egg", "p", 5, H - 2, false);
 spawn("dirt", "p", 2, H - 1, false); // つちのやまチェーンに 最初から 気づけるように 1つ おいておく
+// はたらきアリを 1匹 だけ 最初から 出しておく。
+// 🥚は 自分では かりとれないので、これが 無いと **3つ ならべて タップ** に たどりつくまで
+// もりは 1マスも ひろがらない。実測で「60秒 ほうちで 味方+0 / 敵+8」だった。
+// 1匹 いれば、虫が かってに 草を 刈る ようすを 見てから まねできる。
+spawn("worker", "p", 1, H - 3, false);
 
 let over = false;
 let mergesDone = 0;
+// **プレイヤーが** マージできたか。外来種の 進軍を 待たせる 猶予に つかう。
+// mergesDone は 敵の マージでも 増えるので、これを 猶予の 判定に つかうと
+// 「子供が まだ 1回も マージ できていないのに、敵が 勝手に マージして 進軍が 始まる」
+// ことに なっていた（60秒 ほうちで 味方+0 / 敵+8 の 原因の ひとつ）。
+let playerMerges = 0;
 // かりとりの ごほうび（e2e から 変えられるように 変数に）
 const drops = { egg: .4, dirt: .3 };
 
@@ -275,7 +299,7 @@ function draw() {
     const d = document.createElement("div");
     const cn = clusterN.get(u.id) || 0;
     d.className = `u t-${u.type}` + (u.side === "e" ? " e" : "") + (u.pop ? " pop" : "")
-      + (readyIds.has(u.id) ? " ready" : "") + (u.harvest ? " harvest" : "")
+      + (readyIds.has(u.id) ? " ready" : "") + (u.harvest ? (u.push ? " pushing" : " harvest") : "")
       + (u.hold && Date.now() < u.hold ? " hold" : "")
       + (cn >= 5 ? " can5" : cn >= 3 ? " can3" : "");
     u.pop = false;
@@ -394,6 +418,7 @@ function mergeCheck(u) {
   mergesDone++;
 
   if (u.side === "p") {
+    playerMerges++;
     const ns = SPEC[next];
     if (next === "moundS") {
       banner("⛰️ アリづかが できた！ じかんで 🥚を うんでくれる。づかが ふえるほど 増産だ！");
@@ -430,6 +455,32 @@ function canHarvest(u) {
 function grassNextTo(x, y) {
   return N4(x, y).filter(([a, b]) => tiles[idx(a, b)].locked);
 }
+// となりの 「あいての むらさきの 陣地」。虫の いる マスは のぞく
+// （そこは あらそいで きめる。かってに ぬりかえない）。
+function foeLandNextTo(x, y) {
+  return N4(x, y).filter(([a, b]) => tiles[idx(a, b)].owner === "e" && !tiles[idx(a, b)].locked && !unitAt(a, b));
+}
+// 盤ぜんたいの あいての 陣地（虫の いない マス）。行き先を さがすのに つかう。
+function foeLand() {
+  const out = [];
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const t = tiles[idx(x, y)];
+    if (t.owner === "e" && !t.locked && !unitAt(x, y)) out.push([x, y]);
+  }
+  return out;
+}
+// 虫が いま 手を つける マス。**くさむらが さき、なければ あいての 陣地**。
+//
+// 試作6までは くさむら しか 対象に していなかった。そのため 草が なくなった とたんに
+// 虫は 何も する ことが なくなり、盤は 味方89/敵37 の まま 凍りついた。
+// めあては「あいての 巣まで もりを ひろげよう」なのに、**前に 進む 手だてが なかった**。
+// 数の力で じわじわ おいかえす ——「たたかいで 殺さない」原則の ままで 前線が 動く。
+function workNextTo(x, y) {
+  const grass = grassNextTo(x, y);
+  return grass.length ? grass : foeLandNextTo(x, y);
+}
+// あいての 陣地を おしかえすのは、草を 刈るより 手が かかる
+const PUSH_SLOWER = 1.6;
 
 function openTile(x, y, side) {
   const t = tiles[idx(x, y)];
@@ -445,14 +496,18 @@ function finishHarvest(u) {
   const area = HARVEST[u.type].area;
   let opened = 0;
   if (area === 1) {
-    const g = grassNextTo(u.x, u.y);
-    const t = u.aim && tiles[idx(u.aim.x, u.aim.y)].locked ? [u.aim.x, u.aim.y] : g[0];
+    const g = workNextTo(u.x, u.y);
+    const aimOk = u.aim && (tiles[idx(u.aim.x, u.aim.y)].locked || tiles[idx(u.aim.x, u.aim.y)].owner === "e");
+    const t = aimOk ? [u.aim.x, u.aim.y] : g[0];
     if (t) opened += openTile(t[0], t[1], "p") ? 1 : 0;
   } else if (area === "adj") {
-    for (const [a, b] of grassNextTo(u.x, u.y)) opened += openTile(a, b, "p") ? 1 : 0;
+    for (const [a, b] of workNextTo(u.x, u.y)) opened += openTile(a, b, "p") ? 1 : 0;
   } else {
     for (let y = u.y - 1; y <= u.y + 1; y++) for (let x = u.x - 1; x <= u.x + 1; x++) {
-      if (inB(x, y) && tiles[idx(x, y)].locked) opened += openTile(x, y, "p") ? 1 : 0;
+      if (!inB(x, y)) continue;
+      const t = tiles[idx(x, y)];
+      const foeLand = t.owner === "e" && !t.locked && !unitAt(x, y);
+      if (t.locked || foeLand) opened += openTile(x, y, "p") ? 1 : 0;
     }
   }
   u.aim = null;
@@ -468,9 +523,13 @@ function finishHarvest(u) {
     return !tt.locked && tt.owner === "p" && !unitAt(a, b);
   });
   if (spot) {
+    // 🥚🟤は 動かない 素材。出しすぎると 自陣が うまって、
+    // 虫が 通れなくなり 前線が 止まる（実測で 90秒で 盤が 凍りついた 原因の ひとつ）。
+    // づかの 生産と 同じように、盤の 上の 数で 止める。
+    const count = (type) => units.filter(u => u.side === "p" && u.type === type).length;
     const r = Math.random();
-    if (r < drops.egg) { spawn("egg", "p", ...spot); banner("🌿の 中から 🥚を 見つけた！"); sndPop(); }
-    else if (r < drops.egg + drops.dirt) { spawn("dirt", "p", ...spot); banner("🌿の 中から 🟤つちのやまを 見つけた！ 3つ あつめると…"); sndPop(); }
+    if (r < drops.egg && count("egg") < 8) { spawn("egg", "p", ...spot); banner("🌿の 中から 🥚を 見つけた！"); sndPop(); }
+    else if (r < drops.egg + drops.dirt && count("dirt") < 6) { spawn("dirt", "p", ...spot); banner("🌿の 中から 🟤つちのやまを 見つけた！ 3つ あつめると…"); sndPop(); }
   }
   tutEvent("harvest");
 }
@@ -493,6 +552,11 @@ function nearestMate(u) {
   return best;
 }
 function mateNextTo(u) {
+  // これ以上 上が ない虫（おおあごへいたい・カブトムシ）は、なかまと ならんでも
+  // マージ できない。ここで 「次」を 見ていなかったので、そういう 虫が 2ひき
+  // となり合った とたん、**永久に そこで 3つめを 待ちつづけて 動かなくなっていた**。
+  // 前線が 止まる 原因の ひとつ（実測で 3ひき中 2ひきが 止まった）。
+  if (!SPEC[u.type].next) return false;
   return N4(u.x, u.y).some(([x, y]) => {
     const o = unitAt(x, y);
     return o && o.side === "p" && o.type === u.type;
@@ -500,33 +564,57 @@ function mateNextTo(u) {
 }
 
 function stepForward(u) {
-  if (grassNextTo(u.x, u.y).length) return;      // となりに 草が あるなら 刈るのが さき
+  if (workNextTo(u.x, u.y).length) return;       // となりに 仕事（草・あいての陣地）が あるなら そこが さき
   if (u.hold && Date.now() < u.hold) return;     // 手で おいた 虫は しばらく そこで まつ
   if (mateNextTo(u)) return;                     // なかまと ならんでいるなら 動かない（3つめを 待つ）
 
   // 行き先を きめる。なかまが いれば **なかまが さいゆうせん**。
   // ここを 草ゆうせんに していたので、虫が ちらばって マージ できなかった。
   const mate = nearestMate(u);
-  let goal = mate;
-  if (!goal) {
+  const goals = new Set();
+  if (mate) {
+    goals.add(idx(mate.x, mate.y));
+  } else {
+    // 行き先は くさむら。もう 無ければ **あいての 陣地**へ 向かう。
+    // ここが「草だけ」だったので、草が 尽きた あと 虫は 立ち止まっていた。
     for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
-      if (!tiles[idx(x, y)].locked) continue;
-      const d = Math.abs(x - u.x) + Math.abs(y - u.y);
-      if (!goal || d < goal.d) goal = { x, y, d };
+      if (tiles[idx(x, y)].locked) goals.add(idx(x, y));
+    }
+    if (!goals.size) {
+      for (const [x, y] of foeLand()) goals.add(idx(x, y));
     }
   }
-  if (!goal) return;
+  if (!goals.size) return;
 
-  const cands = N4(u.x, u.y).filter(([x, y]) => {
-    const t = tiles[idx(x, y)];
-    return !t.locked && t.owner === "p" && !unitAt(x, y);
-  });
-  if (!cands.length) return;
-  cands.sort((a, b) =>
-    (Math.abs(a[0] - goal.x) + Math.abs(a[1] - goal.y)) - (Math.abs(b[0] - goal.x) + Math.abs(b[1] - goal.y)));
-  const [nx, ny] = cands[0];
-  if (Math.abs(nx - goal.x) + Math.abs(ny - goal.y) >= goal.d) return;
-  u.x = nx; u.y = ny;
+  // 自分の みどりの 上だけを 通って、いちばん 近い 行き先の となりまで 道を さがす。
+  //
+  // ここは もともと「1マスずつ 近くなる ほうへ」だけ 動く やり方だった。
+  // それだと 🥚や 🟤（動かない 素材）や あいての 陣地に かこまれた とたん、
+  // 遠まわりが できず その場で 詰む。実測では 90秒で 盤が 凍りつき、
+  // 味方69/敵33/草24 の まま 150秒 何も 起きなかった。
+  // 幅ゆうせん探索に して、遠まわりも できるようにする。
+  const from = new Map([[idx(u.x, u.y), null]]);
+  const q = [[u.x, u.y]];
+  let head = 0, best = null;
+  while (head < q.length) {
+    const [cx, cy] = q[head++];
+    if (N4(cx, cy).some(([a, b]) => goals.has(idx(a, b)))) { best = idx(cx, cy); break; }
+    for (const [nx, ny] of N4(cx, cy)) {
+      const k = idx(nx, ny);
+      if (from.has(k)) continue;
+      const t = tiles[k];
+      if (t.locked || t.owner !== "p" || unitAt(nx, ny)) continue;
+      from.set(k, idx(cx, cy));
+      q.push([nx, ny]);
+    }
+  }
+  if (best === null || best === idx(u.x, u.y)) return;
+
+  // 見つけた 道の さいしょの 1マスだけ 進む
+  let cur = best, prev = from.get(cur);
+  while (prev !== null && prev !== idx(u.x, u.y)) { cur = prev; prev = from.get(cur); }
+  if (prev === null) return;
+  u.x = cur % W; u.y = Math.floor(cur / W);
 }
 
 // 400ミリ秒ごとに、となりに くさむらが ある虫を もぐもぐ させる
@@ -537,15 +625,17 @@ setInterval(() => {
 
   for (const u of units) {
     if (!canHarvest(u)) continue;
-    if (dragging && dragging.u === u) { u.harvest = false; u.until = 0; continue; }
+    if (dragging && dragging.u === u) { u.harvest = false; u.push = false; u.until = 0; continue; }
 
     if (u.harvest) {
-      if (now >= u.until) { finishHarvest(u); u.harvest = false; changed = true; }
+      if (now >= u.until) { finishHarvest(u); u.harvest = false; u.push = false; changed = true; }
       continue;
     }
-    if (grassNextTo(u.x, u.y).length) {
+    if (workNextTo(u.x, u.y).length) {
+      const pushing = !grassNextTo(u.x, u.y).length; // 草は もう ない ＝ あいてを おしかえす ばん
       u.harvest = true;
-      u.until = now + HARVEST[u.type].ms;
+      u.push = pushing;
+      u.until = now + Math.round(HARVEST[u.type].ms * (pushing ? PUSH_SLOWER : 1));
       changed = true;
     } else {
       // 草が となりに 無ければ 前線へ 歩く（マージの じゃまに ならない よう ゆっくり）
@@ -573,7 +663,7 @@ document.addEventListener("pointerdown", (ev) => {
   if (!u || u.side !== "p") return;
 
   if (SPEC[u.type].gen) { tapGen(u); return; }
-  u.harvest = false; u.aim = null;
+  u.harvest = false; u.push = false; u.aim = null;
 
   dragging = { u, el, from: { x: u.x, y: u.y }, t0: Date.now() };
   el.style.opacity = ".25";
@@ -614,23 +704,25 @@ document.addEventListener("pointerup", (ev) => {
       const n = clusterOf(u).length;
       if (n >= 5) banner("⭐ 5つ そろった！ タップすると 2体 うまれる ボーナスマージ！");
       else if (n >= 3) banner(`${n}つ そろった。タップで マージ／もう ${5 - n}つ ならべると ボーナス！`);
-    } else if (t.locked && canHarvest(u)) {
-      // くさむらの となりに じぶんの 陣地が あれば、そこへ 出て かりとりを はじめる。
+    } else if ((t.locked || t.owner === "e") && canHarvest(u)) {
+      // くさむら（または あいての 陣地）の となりに じぶんの 陣地が あれば、
+      // そこへ 出て かりとり／おしかえしを はじめる。
       // すでに となりに 立っているなら 動かない（足場を 自分で ふさいで しまうため）。
       const already = N4(x, y).some(([a, b]) => a === u.x && b === u.y);
       const foot = already ? [u.x, u.y]
         : N4(x, y).find(([a, b]) => { const tt = tiles[idx(a, b)]; return !tt.locked && tt.owner === "p" && !unitAt(a, b); });
       if (foot) {
+        const push = !t.locked; // 草ではなく あいての 陣地
         u.x = foot[0]; u.y = foot[1];
         u.aim = { x, y };
         u.harvest = true;
-        u.until = Date.now() + Math.round(HARVEST[u.type].ms * .6); // ねらった ぶん すこし はやい
-        banner("もぐもぐ… 🌿を かりとりちゅう。");
+        u.push = push;
+        // ねらった ぶん すこし はやい
+        u.until = Date.now() + Math.round(HARVEST[u.type].ms * .6 * (push ? PUSH_SLOWER : 1));
+        banner(push ? "ぐいぐい… むらさきの 陣地を おしかえしちゅう。" : "もぐもぐ… 🌿を かりとりちゅう。");
       } else {
         banner("そこは まだ とおいよ。じぶんの みどりの となりから ひろげよう。");
       }
-    } else if (t.owner === "e") {
-      banner("そこは あいての 陣地。虫を ならべて おいはらおう。");
     }
   }
   draw();
@@ -650,10 +742,18 @@ function tapGen(g) {
 // づかの 生産（タップでも 時間でも ここを 通る）
 function tryProduce(g) {
   if (units.filter(u => u.side === "p" && u.type === "egg").length >= 8) return false;
-  const spots = N4(g.x, g.y).filter(([x, y]) => {
-    const t = tiles[idx(x, y)];
-    return !t.locked && t.owner === g.side && !unitAt(x, y);
-  });
+  // づかの となり4マスだけを 見ていたので、そこが 🥚で うまると 増産が **黙って** 止まった。
+  // 子供には「何も おきない」に しか 見えないので、すこし はなれた ところにも うむ。
+  const free = (r) => {
+    const out = [];
+    for (let y = g.y - r; y <= g.y + r; y++) for (let x = g.x - r; x <= g.x + r; x++) {
+      if (!inB(x, y) || Math.max(Math.abs(x - g.x), Math.abs(y - g.y)) !== r) continue;
+      const t = tiles[idx(x, y)];
+      if (!t.locked && t.owner === g.side && !unitAt(x, y)) out.push([x, y]);
+    }
+    return out;
+  };
+  const spots = free(1).length ? free(1) : free(2);
   if (!spots.length) return false;
   spawn("egg", g.side, ...spots[Math.floor(Math.random() * spots.length)]);
   return true;
@@ -689,7 +789,7 @@ setInterval(() => {
 
   for (const u of kids) if (mergeCheck(u)) break;
 
-  if (enemyStep < 8 || (mergesDone === 0 && enemyStep < 20)) { draw(); return; }
+  if (enemyStep < 8 || (playerMerges === 0 && enemyStep < 20)) { draw(); return; }
   // 敵が 新しく ひらける くさむらは 1回に 1マスまで。
   // ここを 3マスに していたので、60秒 放置で 敵 +6 / 味方 +0 という
   // 不公平に なっていた（実機テスト3回目のご指摘）。
@@ -784,10 +884,14 @@ function showEnd(t, b) {
 const tutEl = document.getElementById("tut");
 const TUT = [
   { text: "👑⛰️を タップ → 🥚が うまれる。づかは じかんでも かってに 🥚を うむよ。", done: (e) => e === "egg" },
-  { text: "🥚を 3つ ならべたら **タップ**！ 5つ ならべてから タップすると 2体 うまれる ボーナス！", done: (e) => e === "merge" },
-  { text: "🐜を 🌿くさむらの そばに おこう。**かってに かりとって** もりが ひろがるよ。🥚や 🟤も 見つかる！", done: (e) => e === "harvest" },
+  // 文は そのまま 画面に 出る（textContent）。
+  // ** で かこんでも 太字には ならず、アスタリスクが そのまま 見えてしまう。
+  // 読むのは 小学校ていがくねん なので、強めたい ところは 記号ではなく ことばで 書く。
+  { text: "🥚を 3つ ならべたら、その 🥚を タップ！ 5つ ならべてから タップすると 2体 うまれる ボーナス！", done: (e) => e === "merge" },
+  { text: "🐜を 🌿くさむらの そばに おこう。さわらなくても かってに かりとって もりが ひろがるよ。🥚や 🟤も 見つかる！", done: (e) => e === "harvest" },
   { text: "🟤つちのやまを 3つ あつめると ⛰️アリづか！ づかが ふえるほど 🥚の 増産が はやくなる。", done: (e) => e === "mound", timeout: 25000 },
-  { text: "🐜は なかまの ほうへ 自分から あつまる。でも **マージは タップするまで しない**。5つ ためると おとくだよ！", done: () => false, timeout: 13000 },
+  { text: "🐜は なかまの ほうへ 自分から あつまる。でも マージは タップするまで しない。5つ ためると おとくだよ！", done: () => false, timeout: 13000 },
+  { text: "くさむらが なくなったら、こんどは むらさきの 陣地を おしかえす。🐜を ふちに おいて、あいての 巣🕳️を かこもう！", done: () => false, timeout: 15000 },
 ];
 let tutStep = 0;
 function showTut() {
@@ -812,7 +916,8 @@ addEventListener("resize", () => { applyTile(); draw(); });
 
 if (new URLSearchParams(location.search).has("e2e")) {
   window.__e2e = { units, tiles, spawn, mergeCheck, unitAt, W, H, queen, nest, drops, draw,
-    get over() { return over; }, get merges() { return mergesDone; } };
+    get over() { return over; }, get merges() { return mergesDone; },
+    get playerMerges() { return playerMerges; } };
 }
 </script>
 </body>

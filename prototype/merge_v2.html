@@ -142,6 +142,18 @@ const N4 = (x, y) => [[x+1,y],[x-1,y],[x,y+1],[x,y-1]].filter(([a,b]) => inB(a,b
 // ================= 虫と もの =================
 // power: つよさ。画面にも この数字を そのまま 出す（バッジ）。
 // gen:   時間で 🥚を うむ 生産拠点。interval は うむ 間隔（ミリ秒）。
+// かりとり（開拓）の ちから。虫は じぶんの となりの くさむらを **かってに** かりとる。
+//   ms   … 1回に かかる 時間
+//   area … 1=となり1マス / "adj"=となり ぜんぶ / "3x3"=まわり ぜんぶ
+// 実機テスト3回目で「アリは 自分で 森を 切りひらけない」と 分かったので、
+// ドラッグしなくても 進むように した。どこに 虫を おくかで 広がる 向きを きめる。
+const HARVEST = {
+  worker:  { ms: 3000, area: 1 },
+  soldier: { ms: 2000, area: 1 },
+  major:   { ms: 2000, area: "adj" },
+  kabuto:  { ms: 1500, area: "3x3" }, // 開拓の 王者。ねむりから さめる ねうちが ある
+};
+
 const SPEC = {
   egg:    { name:"たまご",           emoji:"🥚", power:0,  next:"worker" },
   worker: { name:"はたらきアリ",      emoji:"🐜", power:1,  next:"soldier" },
@@ -356,34 +368,119 @@ function mergeCheck(u) {
 }
 
 // ================= かりとり（くさむらを へらす） =================
-function startHarvest(u, x, y) {
-  u.x = x; u.y = y;
-  banner("もぐもぐ… 🌿を かりとりちゅう。");
-  u.harvest = setTimeout(() => {
-    u.harvest = null;
-    if (!units.includes(u) || u.x !== x || u.y !== y) return;
-    const t = tiles[idx(x, y)];
-    t.locked = false;
-    t.owner = "p";
-    flash.add(idx(x, y));
-    wakeSparkle(t, x, y, "p");
-    sndClaim();
-    sparks(x, y);
-
-    // ごほうび: くさむらの 中から 🥚や 🟤が 見つかる
-    const spot = N4(x, y).find(([a, b]) => {
-      const tt = tiles[idx(a, b)];
-      return !tt.locked && tt.owner === "p" && !unitAt(a, b);
-    });
-    if (spot) {
-      const r = Math.random();
-      if (r < drops.egg) { spawn("egg", "p", ...spot); banner("🌿の 中から 🥚を 見つけた！"); sndPop(); }
-      else if (r < drops.egg + drops.dirt) { spawn("dirt", "p", ...spot); banner("🌿の 中から 🟤つちのやまを 見つけた！ 3つ あつめると…"); sndPop(); }
-    }
-    tutEvent("harvest");
-    draw();
-  }, 1600);
+// 虫は となりに くさむらが あれば **かってに** かりとる。ドラッグは 向きを きめる ためのもの。
+function canHarvest(u) {
+  return HARVEST[u.type] && u.side === "p";
 }
+function grassNextTo(x, y) {
+  return N4(x, y).filter(([a, b]) => tiles[idx(a, b)].locked);
+}
+
+function openTile(x, y, side) {
+  const t = tiles[idx(x, y)];
+  if (!t.locked && t.owner === side) return false;
+  t.locked = false;
+  t.owner = side;
+  flash.add(idx(x, y));
+  wakeSparkle(t, x, y, side);
+  return true;
+}
+
+function finishHarvest(u) {
+  const area = HARVEST[u.type].area;
+  let opened = 0;
+  if (area === 1) {
+    const g = grassNextTo(u.x, u.y);
+    const t = u.aim && tiles[idx(u.aim.x, u.aim.y)].locked ? [u.aim.x, u.aim.y] : g[0];
+    if (t) opened += openTile(t[0], t[1], "p") ? 1 : 0;
+  } else if (area === "adj") {
+    for (const [a, b] of grassNextTo(u.x, u.y)) opened += openTile(a, b, "p") ? 1 : 0;
+  } else {
+    for (let y = u.y - 1; y <= u.y + 1; y++) for (let x = u.x - 1; x <= u.x + 1; x++) {
+      if (inB(x, y) && tiles[idx(x, y)].locked) opened += openTile(x, y, "p") ? 1 : 0;
+    }
+  }
+  u.aim = null;
+  if (!opened) return;
+
+  sndClaim();
+  sparks(u.x, u.y);
+  stepForward(u);
+
+  // ごほうび: くさむらの 中から 🥚や 🟤が 見つかる
+  const spot = N4(u.x, u.y).find(([a, b]) => {
+    const tt = tiles[idx(a, b)];
+    return !tt.locked && tt.owner === "p" && !unitAt(a, b);
+  });
+  if (spot) {
+    const r = Math.random();
+    if (r < drops.egg) { spawn("egg", "p", ...spot); banner("🌿の 中から 🥚を 見つけた！"); sndPop(); }
+    else if (r < drops.egg + drops.dirt) { spawn("dirt", "p", ...spot); banner("🌿の 中から 🟤つちのやまを 見つけた！ 3つ あつめると…"); sndPop(); }
+  }
+  tutEvent("harvest");
+}
+
+// かりとりが おわったら、いちばん 近い くさむらの ほうへ 1マス すすむ。
+//
+// これが ないと、となりを 刈りおえた虫は その場で 止まり、二度と 前に すすまない。
+// 実機テスト3回目の「アリは 自分で 森を 切りひらけない」は、じつは
+// ここが 抜けていたのが 本体だった（1マスは 刈れても 前線が 動かない）。
+// 虫は じぶんで すすむ。プレイヤーは「どこに おくか」で 向きを きめる。
+function stepForward(u) {
+  if (grassNextTo(u.x, u.y).length) return; // まだ となりに 草が あるなら 動かない
+
+  // いちばん 近い くさむらを さがす
+  let best = null;
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    if (!tiles[idx(x, y)].locked) continue;
+    const d = Math.abs(x - u.x) + Math.abs(y - u.y);
+    if (!best || d < best.d) best = { x, y, d };
+  }
+  if (!best) return;
+
+  // じぶんの 陣地の 中を、草に 近づく ほうへ 1マス
+  const cands = N4(u.x, u.y).filter(([x, y]) => {
+    const t = tiles[idx(x, y)];
+    return !t.locked && t.owner === "p" && !unitAt(x, y);
+  });
+  if (!cands.length) return;
+  cands.sort((a, b) =>
+    (Math.abs(a[0] - best.x) + Math.abs(a[1] - best.y)) - (Math.abs(b[0] - best.x) + Math.abs(b[1] - best.y)));
+  const [nx, ny] = cands[0];
+  if (Math.abs(nx - best.x) + Math.abs(ny - best.y) >= best.d) return; // 近づかないなら 動かない
+  u.x = nx; u.y = ny;
+}
+
+// 400ミリ秒ごとに、となりに くさむらが ある虫を もぐもぐ させる
+setInterval(() => {
+  if (over) return;
+  const now = Date.now();
+  let changed = false;
+
+  for (const u of units) {
+    if (!canHarvest(u)) continue;
+    if (dragging && dragging.u === u) { u.harvest = false; u.until = 0; continue; }
+
+    if (u.harvest) {
+      if (now >= u.until) { finishHarvest(u); u.harvest = false; changed = true; }
+      continue;
+    }
+    if (grassNextTo(u.x, u.y).length) {
+      u.harvest = true;
+      u.until = now + HARVEST[u.type].ms;
+      changed = true;
+    } else {
+      // 草が となりに 無ければ 前線へ 歩く（マージの じゃまに ならない よう ゆっくり）
+      if (!u.walkAt || now >= u.walkAt) {
+        const before = u.x + "," + u.y;
+        stepForward(u);
+        u.walkAt = now + 1200;
+        if (before !== u.x + "," + u.y) changed = true;
+      }
+    }
+  }
+  if (changed) draw();
+}, 400);
 
 // ================= そうさ =================
 const ghost = document.createElement("div");
@@ -398,7 +495,7 @@ document.addEventListener("pointerdown", (ev) => {
   if (!u || u.side !== "p") return;
 
   if (SPEC[u.type].gen) { tapGen(u); return; }
-  if (u.harvest) { clearTimeout(u.harvest); u.harvest = null; }
+  u.harvest = false; u.aim = null;
 
   dragging = { u, el };
   el.style.opacity = ".25";
@@ -424,12 +521,23 @@ document.addEventListener("pointerup", (ev) => {
     if (!t.locked && t.owner !== "e") {
       u.x = x; u.y = y;
       if (!mergeCheck(u)) beep(440, .04, "sine", .05);
-    } else if (
-      // くさむらへ おける のは 虫だけ。じぶんの 陣地の となりから かりとっていく
-      t.locked && SPEC[u.type].power >= 1 && !SPEC[u.type].gen &&
-      N4(x, y).some(([a, b]) => { const tt = tiles[idx(a, b)]; return !tt.locked && tt.owner === "p"; })
-    ) {
-      startHarvest(u, x, y);
+    } else if (t.locked && canHarvest(u)) {
+      // くさむらの となりに じぶんの 陣地が あれば、そこへ 出て かりとりを はじめる。
+      // すでに となりに 立っているなら 動かない（足場を 自分で ふさいで しまうため）。
+      const already = N4(x, y).some(([a, b]) => a === u.x && b === u.y);
+      const foot = already ? [u.x, u.y]
+        : N4(x, y).find(([a, b]) => { const tt = tiles[idx(a, b)]; return !tt.locked && tt.owner === "p" && !unitAt(a, b); });
+      if (foot) {
+        u.x = foot[0]; u.y = foot[1];
+        u.aim = { x, y };
+        u.harvest = true;
+        u.until = Date.now() + Math.round(HARVEST[u.type].ms * .6); // ねらった ぶん すこし はやい
+        banner("もぐもぐ… 🌿を かりとりちゅう。");
+      } else {
+        banner("そこは まだ とおいよ。じぶんの みどりの となりから ひろげよう。");
+      }
+    } else if (t.owner === "e") {
+      banner("そこは あいての 陣地。虫を ならべて おいはらおう。");
     }
   }
   draw();
@@ -489,15 +597,23 @@ setInterval(() => {
   for (const u of kids) if (mergeCheck(u)) break;
 
   if (enemyStep < 8 || (mergesDone === 0 && enemyStep < 20)) { draw(); return; }
+  // 敵が 新しく ひらける くさむらは 1回に 1マスまで。
+  // ここを 3マスに していたので、60秒 放置で 敵 +6 / 味方 +0 という
+  // 不公平に なっていた（実機テスト3回目のご指摘）。
+  let openedByEnemy = 0;
   const walkers = kids.sort((a, b) => b.y - a.y).slice(0, 3);
   for (const u of walkers) {
     const cands = N4(u.x, u.y)
-      .filter(([x, y]) => !unitAt(x, y) && tiles[idx(x, y)].owner !== "p")
+      .filter(([x, y]) => {
+        if (unitAt(x, y) || tiles[idx(x, y)].owner === "p") return false;
+        if (tiles[idx(x, y)].locked && openedByEnemy >= 1) return false; // 開拓は 1マスまで
+        return true;
+      })
       .sort((a, b) => (Math.abs(a[0] - queen.x) + Math.abs(a[1] - queen.y)) - (Math.abs(b[0] - queen.x) + Math.abs(b[1] - queen.y)));
     if (!cands.length) continue;
     const [x, y] = cands[0];
     const t = tiles[idx(x, y)];
-    if (t.locked) { t.locked = false; wakeSparkle(t, x, y, "e"); }
+    if (t.locked) { t.locked = false; openedByEnemy++; wakeSparkle(t, x, y, "e"); }
     t.owner = "e";
     u.x = x; u.y = y;
   }
@@ -576,9 +692,9 @@ const tutEl = document.getElementById("tut");
 const TUT = [
   { text: "👑⛰️を タップ → 🥚が うまれる。づかは じかんでも かってに 🥚を うむよ。", done: (e) => e === "egg" },
   { text: "🥚を ドラッグして 3つ ならべよう。3つで 🐜、5つ ならべると 2体 うまれて おとく！", done: (e) => e === "merge" },
-  { text: "🐜を 🌿くさむらの 上に おいてみよう。かりとって もりが ひろがり、🥚や 🟤が 見つかることも！", done: (e) => e === "harvest" },
+  { text: "🐜を 🌿くさむらの そばに おこう。**かってに かりとって** もりが ひろがるよ。🥚や 🟤も 見つかる！", done: (e) => e === "harvest" },
   { text: "🟤つちのやまを 3つ あつめると ⛰️アリづか！ づかが ふえるほど 🥚の 増産が はやくなる。", done: (e) => e === "mound", timeout: 25000 },
-  { text: "🐜も 3つで 上の 格に！ 大きさと 数字（つよさ）が 上がる。あいての 巣🕳️を めざそう！", done: () => false, timeout: 10000 },
+  { text: "🐜も 3つで 上の 格に！ 格が 上がると かりとりも はやく 広くなる。✨には 🪲カブトムシが ねむっているよ。", done: () => false, timeout: 12000 },
 ];
 let tutStep = 0;
 function showTut() {
